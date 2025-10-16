@@ -73,7 +73,10 @@ qs("#btnLogin").onclick = async ()=>{
   if (r.ok && d.ok){
     isLoggedIn = true;
     qs("#loginModal").classList.add("hidden");
-    await refresh(true);
+// update queue locally without refreshing video
+  const s = await (await fetch('/api/state')).json();
+  queueEl.innerHTML = (s.queue||[]).map(rQueue).join("") || '<div class="small">Queue empty</div>';  
+    
   } else {
     msg.textContent = d.error || "Login failed";
   }
