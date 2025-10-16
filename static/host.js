@@ -1,4 +1,4 @@
-// === v01.2: playback logic fix (auto-next, prev/next from start) ===
+// === v01.3: fix seek lock & double-next skip ===
 let settingsDirty = { submitLimit:false, nickChange:false };
 function markDirty(key){ settingsDirty[key] = true; }
 function clearDirty(){ settingsDirty = { submitLimit:false, nickChange:false }; }
@@ -33,6 +33,7 @@ let pauseRefresh = false;
 // --- new vars for countdown / auto-next ---
 let countdownTimer = null;
 let countdownActive = false;
+let skipNextEnded = false;   // prevent double trigger
 
 function whoHost(it){ return (it.by_name ? `${it.by_name} (${it.by_ip||''})` : (it.by_ip||'')); }
 function rQueue(it){
@@ -104,6 +105,7 @@ function startCountdownAndNext(){
       clearInterval(countdownTimer);
       countdown.classList.add('hidden');
       countdownActive = false;
+      skipNextEnded = true; // prevent onStateChange duplicate next
       nextVideoFromStart();
     }else{
       countdown.textContent = sec;
@@ -113,7 +115,7 @@ function startCountdownAndNext(){
 
 function onPlayerStateChange(e){
   if (e.data === YT.PlayerState.ENDED){
-    // Just in case countdown didn't trigger
+    if (skipNextEnded){ skipNextEnded = false; return; } // ignore duplicate trigger
     nextVideoFromStart();
   }
 }
@@ -138,16 +140,11 @@ async function refresh(force=false){
   if (cid && player){
     if (cid !== currentId || force){
       currentId = cid;
-      // Only resume when refreshing page, not after next/prev
       const seek = Math.max(0, Math.floor((prog.pos||0)));
       player.loadVideoById({videoId: cid, startSeconds: seek, suggestedQuality: 'large'});
     } else {
-      const dur = Number(player.getDuration()||0);
-      const pos = Number(player.getCurrentTime()||0);
-      const target = Math.max(0, Math.floor((prog.pos||0)));
-      if (Math.abs(pos - target) > 3 && dur>0){
-        player.seekTo(target, true);
-      }
+      // removed auto-seekTo so user can freely seek manually
+      // old code: if (Math.abs(pos - target) > 3 && dur>0){ player.seekTo(target, true); }
     }
   }
 }
