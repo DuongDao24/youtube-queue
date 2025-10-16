@@ -39,7 +39,7 @@ def page_user():
 
 @app.route("/host")
 def page_host():
-    return render_template("host.html")
+    return render_template("host.html", app_title="YouTube Queue Online", logo_url=config.get("logo_path"))
 
 # === API endpoints ===
 
