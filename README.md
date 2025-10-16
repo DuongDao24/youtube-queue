@@ -1,6 +1,6 @@
-# YouTube Queue Online — v08.2 (Root Ready, Render-ready)
+# YouTube Queue — v01 (Base UI Update, Stable Core Behavior)
 
-**New in v08.2**
+**New in v01**
 - Host login (Admin/0000) with session, changeable via HOST_API_KEY
 - Resume video after host reload (seek to last progress)
 - Countdown 10 seconds before auto-next
@@ -17,3 +17,10 @@
 - Build: `pip install -r requirements.txt`
 - Start: `gunicorn -w 1 -k gevent -b 0.0.0.0:$PORT app:app`
 - Env: `APP_TITLE`, `HOST_API_KEY`, `RATE_LIMIT_S`, `PYTHON_VERSION=3.11.9`
+
+
+## v01 — UI Refresh & Repo Renaming
+- Renamed repository to YouTube Queue — v01
+- Unified naming across files and README
+- Applied neumorphic UI to host & user pages (no logic changes)
+- Kept Flask routes and behavior intact; ready for next bug-fix phase
