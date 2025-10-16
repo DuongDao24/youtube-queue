@@ -131,8 +131,11 @@ async function post(path, body){
 
 async function refresh(force=false){
   if (!isLoggedIn){ await loginRequired(); return; }
-  const s = await (await fetch('/api/state')).json();
-  queueEl.innerHTML = (s.queue||[]).map(rQueue).join("") || '<div class="small">Queue empty</div>';
+// Remove item locally without reloading player or fetching state
+e.target.closest(".item").remove();
+if (!queueEl.querySelector(".item")) {
+  queueEl.innerHTML = '<div class="small">Queue empty</div>';
+}
   historyEl.innerHTML = (s.history||[]).slice(0,15).map(rHistory).join("") || '<div class="small">No history</div>';
   if (!pauseRefresh || force){
     qs("#rate").value = (s.config && s.config.rate_limit_s) || 180;
@@ -141,10 +144,10 @@ async function refresh(force=false){
   const cid = s.current && s.current.id;
   const prog = s.progress || {};
   if (cid && player){
-    if (cid !== currentId || force){
-      currentId = cid;
-      const seek = Math.max(0, Math.floor((prog.pos||0)));
-      player.loadVideoById({videoId: cid, startSeconds: seek, suggestedQuality: 'large'});
+    if ((cid !== currentId) || (force && player.getVideoData().video_id !== cid)){
+  currentId = cid;
+  const seek = Math.max(0, Math.floor((prog.pos||0)));
+  player.loadVideoById({videoId: cid, startSeconds: seek, suggestedQuality: 'large'});
     } else {
       // removed auto-seekTo so user can freely seek manually
       // old code: if (Math.abs(pos - target) > 3 && dur>0){ player.seekTo(target, true); }
