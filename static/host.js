@@ -1,3 +1,27 @@
+
+// === v01.1: prevent auto-reset of settings while editing ===
+let settingsDirty = { submitLimit:false, nickChange:false };
+function markDirty(key){ settingsDirty[key] = true; }
+function clearDirty(){ settingsDirty = { submitLimit:false, nickChange:false }; }
+
+document.addEventListener('DOMContentLoaded', () => {
+  const submitEl = document.querySelector('#submitLimit');
+  const nickEl = document.querySelector('#nicknameChange');
+  if(submitEl){ ['input','change'].forEach(ev=> submitEl.addEventListener(ev, ()=>markDirty('submitLimit')) ); }
+  if(nickEl){ ['input','change'].forEach(ev=> nickEl.addEventListener(ev, ()=>markDirty('nickChange')) ); }
+
+  // Enter-to-login on modal
+  const loginModal = document.querySelector('#hostLoginModal');
+  if(loginModal){
+    loginModal.addEventListener('keydown', (e)=>{
+      if(e.key === 'Enter'){
+        const btn = loginModal.querySelector('button.login-btn');
+        if(btn){ btn.click(); }
+      }
+    });
+  }
+});
+
 let isLoggedIn = false;
 const qs = (s)=>document.querySelector(s);
 const queueEl = qs("#queue");
@@ -183,3 +207,7 @@ queueEl.addEventListener('click', async (e)=>{
 if (window.YT && window.YT.Player){ window.onYouTubeIframeAPIReady(); }
 refresh(true);
 setInterval(()=>{ if(!pauseRefresh) refresh(false); }, 2000);
+
+
+// after settings saved (hook this in existing code if response ok)
+function __clearDirtyFlagsAfterSave(){ clearDirty(); }
