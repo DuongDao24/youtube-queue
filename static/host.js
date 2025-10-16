@@ -1,4 +1,4 @@
-// === v01.5: fix skip first video + countdown validation ===
+// === v01.5.1: fix skip first video (double /next protection) ===
 let settingsDirty = { submitLimit:false, nickChange:false };
 function markDirty(key){ settingsDirty[key] = true; }
 function clearDirty(){ settingsDirty = { submitLimit:false, nickChange:false }; }
@@ -34,7 +34,8 @@ let pauseRefresh = false;
 let countdownTimer = null;
 let countdownActive = false;
 let skipNextEnded = false;
-let hasPlayedOnce = false; // fix first skip
+let hasPlayedOnce = false; 
+let hasAutoNexted = false; // ✅ new flag: prevent double next
 
 function whoHost(it){ return (it.by_name ? `${it.by_name} (${it.by_ip||''})` : (it.by_ip||'')); }
 function rQueue(it){
@@ -111,11 +112,13 @@ function startCountdownAndNext(){
       clearInterval(countdownTimer);
       countdown.classList.add('hidden');
       countdownActive = false;
-      // ✅ only next if video really ended
       const remain = Math.max(0, player.getDuration() - player.getCurrentTime());
-      if (remain <= 1.5){
+      // ✅ Only next once and only if video really ended
+      if (remain <= 1.5 && !hasAutoNexted){
+        hasAutoNexted = true;
         skipNextEnded = true;
         nextVideoFromStart();
+        setTimeout(()=> hasAutoNexted = false, 4000);
       }
     }else{
       countdown.textContent = sec;
@@ -130,7 +133,12 @@ function onPlayerStateChange(e){
   if (e.data === YT.PlayerState.ENDED){
     if (!hasPlayedOnce){ hasPlayedOnce = true; return; }
     if (skipNextEnded){ skipNextEnded = false; return; }
-    nextVideoFromStart();
+    // ✅ prevent duplicate next
+    if (!hasAutoNexted){
+      hasAutoNexted = true;
+      nextVideoFromStart();
+      setTimeout(()=> hasAutoNexted = false, 4000);
+    }
   }
 }
 
@@ -140,7 +148,6 @@ async function post(path, body){
   return r.json().catch(()=>({}));
 }
 
-// ✅ fix: sync currentId immediately when first load
 async function refresh(force=false){
   if (!isLoggedIn){ await loginRequired(); return; }
   const s = await (await fetch('/api/state')).json();
