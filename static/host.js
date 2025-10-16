@@ -1,4 +1,4 @@
-// === v01.3: fix seek lock & double-next skip ===
+// === v01.4: stable playback, no skip, smooth remove ===
 let settingsDirty = { submitLimit:false, nickChange:false };
 function markDirty(key){ settingsDirty[key] = true; }
 function clearDirty(){ settingsDirty = { submitLimit:false, nickChange:false }; }
@@ -30,10 +30,11 @@ let currentId = null;
 let tickTimer = null;
 let pauseRefresh = false;
 
-// --- new vars for countdown / auto-next ---
+// --- countdown + skip controls ---
 let countdownTimer = null;
 let countdownActive = false;
-let skipNextEnded = false;   // prevent double trigger
+let skipNextEnded = false;
+let hasPlayedOnce = false; // fix first skip
 
 function whoHost(it){ return (it.by_name ? `${it.by_name} (${it.by_ip||''})` : (it.by_ip||'')); }
 function rQueue(it){
@@ -73,11 +74,8 @@ qs("#btnLogin").onclick = async ()=>{
   if (r.ok && d.ok){
     isLoggedIn = true;
     qs("#loginModal").classList.add("hidden");
-// Remove item locally without reloading player or fetching state
-e.target.closest(".item").remove();
-if (!queueEl.querySelector(".item")) {
-  queueEl.innerHTML = '<div class="small">Queue empty</div>';
-} else {
+    await refresh(true);
+  } else {
     msg.textContent = d.error || "Login failed";
   }
 };
@@ -90,7 +88,13 @@ window.onYouTubeIframeAPIReady = function(){
     events: { 'onReady': onPlayerReady, 'onStateChange': onPlayerStateChange }
   });
 }
+
 function onPlayerReady(){
+  // sync currentId with actual player
+  try {
+    const data = player.getVideoData();
+    if (data && data.video_id) currentId = data.video_id;
+  } catch(e){}
   refresh(true);
   if (tickTimer) clearInterval(tickTimer);
   tickTimer = setInterval(sendProgressTick, 1000);
@@ -108,7 +112,7 @@ function startCountdownAndNext(){
       clearInterval(countdownTimer);
       countdown.classList.add('hidden');
       countdownActive = false;
-      skipNextEnded = true; // prevent onStateChange duplicate next
+      skipNextEnded = true; // prevent double trigger
       nextVideoFromStart();
     }else{
       countdown.textContent = sec;
@@ -117,8 +121,12 @@ function startCountdownAndNext(){
 }
 
 function onPlayerStateChange(e){
+  if (e.data === YT.PlayerState.PLAYING){
+    hasPlayedOnce = true;
+  }
   if (e.data === YT.PlayerState.ENDED){
-    if (skipNextEnded){ skipNextEnded = false; return; } // ignore duplicate trigger
+    if (!hasPlayedOnce){ hasPlayedOnce = true; return; } // ignore first stray event
+    if (skipNextEnded){ skipNextEnded = false; return; }
     nextVideoFromStart();
   }
 }
@@ -131,11 +139,8 @@ async function post(path, body){
 
 async function refresh(force=false){
   if (!isLoggedIn){ await loginRequired(); return; }
-// Remove item locally without reloading player or fetching state
-e.target.closest(".item").remove();
-if (!queueEl.querySelector(".item")) {
-  queueEl.innerHTML = '<div class="small">Queue empty</div>';
-}
+  const s = await (await fetch('/api/state')).json();
+  queueEl.innerHTML = (s.queue||[]).map(rQueue).join("") || '<div class="small">Queue empty</div>';
   historyEl.innerHTML = (s.history||[]).slice(0,15).map(rHistory).join("") || '<div class="small">No history</div>';
   if (!pauseRefresh || force){
     qs("#rate").value = (s.config && s.config.rate_limit_s) || 180;
@@ -144,13 +149,11 @@ if (!queueEl.querySelector(".item")) {
   const cid = s.current && s.current.id;
   const prog = s.progress || {};
   if (cid && player){
-    if ((cid !== currentId) || (force && player.getVideoData().video_id !== cid)){
-  currentId = cid;
-  const seek = Math.max(0, Math.floor((prog.pos||0)));
-  player.loadVideoById({videoId: cid, startSeconds: seek, suggestedQuality: 'large'});
-    } else {
-      // removed auto-seekTo so user can freely seek manually
-      // old code: if (Math.abs(pos - target) > 3 && dur>0){ player.seekTo(target, true); }
+    const nowId = player.getVideoData().video_id;
+    if ((cid !== currentId) || (force && nowId !== cid)){
+      currentId = cid;
+      const seek = Math.max(0, Math.floor((prog.pos||0)));
+      player.loadVideoById({videoId: cid, startSeconds: seek, suggestedQuality: 'large'});
     }
   }
 }
@@ -245,10 +248,18 @@ qs("#btnSaveAuth").onclick = async()=>{
   alert("Saved. You can now login with new credentials.");
 };
 
+// --- Remove item (smooth, no player reload) ---
 queueEl.addEventListener('click', async (e)=>{
   if (e.target.tagName === "BUTTON" && e.target.dataset.id){
-    await fetch('/api/remove', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({id:e.target.dataset.id})});
-    await refresh(true);
+    await fetch('/api/remove', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({id:e.target.dataset.id})
+    });
+    e.target.closest(".item").remove();
+    if (!queueEl.querySelector(".item")) {
+      queueEl.innerHTML = '<div class="small">Queue empty</div>';
+    }
   }
 });
 
