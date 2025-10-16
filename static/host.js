@@ -1,5 +1,4 @@
-
-// === v01.1: prevent auto-reset of settings while editing ===
+// === v01.2: playback logic fix (auto-next, prev/next from start) ===
 let settingsDirty = { submitLimit:false, nickChange:false };
 function markDirty(key){ settingsDirty[key] = true; }
 function clearDirty(){ settingsDirty = { submitLimit:false, nickChange:false }; }
@@ -10,7 +9,6 @@ document.addEventListener('DOMContentLoaded', () => {
   if(submitEl){ ['input','change'].forEach(ev=> submitEl.addEventListener(ev, ()=>markDirty('submitLimit')) ); }
   if(nickEl){ ['input','change'].forEach(ev=> nickEl.addEventListener(ev, ()=>markDirty('nickChange')) ); }
 
-  // Enter-to-login on modal
   const loginModal = document.querySelector('#hostLoginModal');
   if(loginModal){
     loginModal.addEventListener('keydown', (e)=>{
@@ -31,6 +29,10 @@ let player = null;
 let currentId = null;
 let tickTimer = null;
 let pauseRefresh = false;
+
+// --- new vars for countdown / auto-next ---
+let countdownTimer = null;
+let countdownActive = false;
 
 function whoHost(it){ return (it.by_name ? `${it.by_name} (${it.by_ip||''})` : (it.by_ip||'')); }
 function rQueue(it){
@@ -76,6 +78,7 @@ qs("#btnLogin").onclick = async ()=>{
   }
 };
 
+// --- YouTube Player setup ---
 window.onYouTubeIframeAPIReady = function(){
   player = new YT.Player('player', {
     videoId: '',
@@ -88,16 +91,39 @@ function onPlayerReady(){
   if (tickTimer) clearInterval(tickTimer);
   tickTimer = setInterval(sendProgressTick, 1000);
 }
+
+function startCountdownAndNext(){
+  if(countdownActive) return;
+  countdownActive = true;
+  let sec = 10;
+  countdown.classList.remove('hidden');
+  countdown.textContent = sec;
+  countdownTimer = setInterval(()=>{
+    sec--;
+    if(sec<=0){
+      clearInterval(countdownTimer);
+      countdown.classList.add('hidden');
+      countdownActive = false;
+      nextVideoFromStart();
+    }else{
+      countdown.textContent = sec;
+    }
+  },1000);
+}
+
 function onPlayerStateChange(e){
   if (e.data === YT.PlayerState.ENDED){
-    post('/api/progress', {ended:true, videoId: currentId, pos: player.getDuration(), dur: player.getDuration()})
-      .then(()=> setTimeout(refresh, 800));
+    // Just in case countdown didn't trigger
+    nextVideoFromStart();
   }
 }
+
+// --- Helpers ---
 async function post(path, body){
   const r = await fetch(path, {method:'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body||{})});
   return r.json().catch(()=>({}));
 }
+
 async function refresh(force=false){
   if (!isLoggedIn){ await loginRequired(); return; }
   const s = await (await fetch('/api/state')).json();
@@ -112,6 +138,7 @@ async function refresh(force=false){
   if (cid && player){
     if (cid !== currentId || force){
       currentId = cid;
+      // Only resume when refreshing page, not after next/prev
       const seek = Math.max(0, Math.floor((prog.pos||0)));
       player.loadVideoById({videoId: cid, startSeconds: seek, suggestedQuality: 'large'});
     } else {
@@ -125,6 +152,7 @@ async function refresh(force=false){
   }
 }
 
+// --- send progress and manage countdown ---
 async function sendProgressTick(){
   if (!player || !isLoggedIn) return;
   try{
@@ -133,10 +161,10 @@ async function sendProgressTick(){
     const vid = currentId;
     if (dur>0){
       const remain = Math.max(0, dur - pos);
-      if (remain <= 10){
-        countdown.classList.remove('hidden');
-        countdown.textContent = Math.ceil(remain);
-      } else {
+      if (remain <= 10 && !countdownActive && player.getPlayerState() === YT.PlayerState.PLAYING){
+        startCountdownAndNext();
+      }
+      if (remain > 10){
         countdown.classList.add('hidden');
       }
     }
@@ -144,23 +172,40 @@ async function sendProgressTick(){
   }catch(e){}
 }
 
-// Controls
-qs("#btnPlay").onclick = async()=>{
+// --- Playback controls ---
+async function playCurrentFromStart(){
   const s = await (await fetch('/api/state')).json();
   const cid = s.current && s.current.id;
-  const prog = s.progress || {};
   if (cid){
     currentId = cid;
-    const seek = Math.max(0, Math.floor((prog.pos||0)));
-    if (player) player.loadVideoById({videoId: cid, startSeconds: seek, suggestedQuality: 'large'});
-    await post('/api/play', {videoId: cid, pos: seek});
+    player.loadVideoById({videoId: cid, startSeconds: 0, suggestedQuality: 'large'});
+    await post('/api/play', {videoId: cid, pos: 0});
   } else {
     await post('/api/play', {});
   }
   await refresh(true);
-};
-qs("#btnNext").onclick = async()=>{ await post('/api/next', {}); await refresh(true); };
-qs("#btnPrev").onclick = async()=>{ await post('/api/prev', {}); await refresh(true); };
+}
+
+async function nextVideoFromStart(){
+  await post('/api/next', {});
+  await refresh(true);
+  if (currentId){
+    player.loadVideoById({videoId: currentId, startSeconds: 0, suggestedQuality: 'large'});
+  }
+}
+
+async function prevVideoFromStart(){
+  await post('/api/prev', {});
+  await refresh(true);
+  if (currentId){
+    player.loadVideoById({videoId: currentId, startSeconds: 0, suggestedQuality: 'large'});
+  }
+}
+
+// --- Button bindings ---
+qs("#btnPlay").onclick = playCurrentFromStart;
+qs("#btnNext").onclick = nextVideoFromStart;
+qs("#btnPrev").onclick = prevVideoFromStart;
 qs("#btnClear").onclick = async()=>{ await post('/api/clear', {}); await refresh(true); };
 
 ["#rate","#nickHours"].forEach(sel=>{
@@ -208,6 +253,4 @@ if (window.YT && window.YT.Player){ window.onYouTubeIframeAPIReady(); }
 refresh(true);
 setInterval(()=>{ if(!pauseRefresh) refresh(false); }, 2000);
 
-
-// after settings saved (hook this in existing code if response ok)
 function __clearDirtyFlagsAfterSave(){ clearDirty(); }
