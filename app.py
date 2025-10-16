@@ -1,4 +1,9 @@
-import os, time, json, threading, queue
+# ==========================================================
+# YouTube Queue Online — v01.5.1
+# Simplified Host (no HOST_API_KEY required)
+# ==========================================================
+
+import os, time, json
 from flask import Flask, request, jsonify, render_template, send_from_directory
 from flask_cors import CORS
 
@@ -9,7 +14,6 @@ CORS(app)
 config = {
     "admin_user": os.getenv("HOST_USER", "Admin"),
     "admin_pass": os.getenv("HOST_PASS", "0000"),
-    "api_key": os.getenv("HOST_API_KEY", ""),
     "rate_limit_s": int(os.getenv("RATE_LIMIT_S", "180")),
     "nick_change_hours": int(os.getenv("NICK_CHANGE_HOURS", "24")),
     "queue": [],
@@ -26,13 +30,9 @@ def client_ip():
     return request.headers.get("X-Forwarded-For", request.remote_addr or "0.0.0.0")
 
 def persist():
-    pass  # temporary memory-only (Render Free resets on restart)
+    pass  # memory only (Render Free resets on restart)
 
-def now_str():
-    return time.strftime("%H:%M:%S", time.localtime())
-
-# === Routes ===
-
+# === Pages ===
 @app.route("/")
 def page_user():
     return render_template("user.html")
@@ -71,9 +71,7 @@ def api_login():
 
 @app.route("/api/admin/update_auth", methods=["POST"])
 def api_update_auth():
-    key = request.headers.get("X-Host-Key", "")
-    if key != config["api_key"]:
-        return jsonify({"error": "Unauthorized"}), 401
+    # Removed API key requirement for simplicity
     data = request.get_json(silent=True) or {}
     u = data.get("username")
     p = data.get("password")
@@ -86,9 +84,7 @@ def api_update_auth():
 
 @app.route("/api/config", methods=["POST"])
 def api_config():
-    key = request.headers.get("X-Host-Key", "")
-    if key != config["api_key"]:
-        return jsonify({"error": "Unauthorized"}), 401
+    # Removed key authorization check (for free deployment ease)
     data = request.get_json(silent=True) or {}
     config["rate_limit_s"] = int(data.get("rate_limit_s", config["rate_limit_s"]))
     config["nick_change_hours"] = int(data.get("nick_change_hours", config["nick_change_hours"]))
@@ -97,9 +93,7 @@ def api_config():
 
 @app.route("/api/logo", methods=["POST"])
 def api_logo():
-    key = request.headers.get("X-Host-Key", "")
-    if key != config["api_key"]:
-        return jsonify({"error": "Unauthorized"}), 401
+    # Removed host key requirement
     f = request.files.get("logo")
     if not f:
         return jsonify({"error": "No file"}), 400
@@ -242,6 +236,7 @@ def send_static(path):
     return send_from_directory("static", path)
 
 
+# === Main ===
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
