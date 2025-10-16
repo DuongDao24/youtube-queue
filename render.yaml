@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: youtube-queue-online
+    env: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn -w 1 -k gevent -b 0.0.0.0:$PORT app:app
+    autoDeploy: true
+    envVars:
+      - key: APP_TITLE
+        value: "YouTube Queue Online"
+      - key: HOST_API_KEY
+        value: "ytq-premium-2025-dxd"
+      - key: RATE_LIMIT_S
+        value: "180"
+      - key: PYTHON_VERSION
+        value: 3.11.9
