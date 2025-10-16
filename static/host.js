@@ -1,4 +1,4 @@
-// === v01.4: stable playback, no skip, smooth remove ===
+// === v01.5: fix skip first video + countdown validation ===
 let settingsDirty = { submitLimit:false, nickChange:false };
 function markDirty(key){ settingsDirty[key] = true; }
 function clearDirty(){ settingsDirty = { submitLimit:false, nickChange:false }; }
@@ -90,7 +90,6 @@ window.onYouTubeIframeAPIReady = function(){
 }
 
 function onPlayerReady(){
-  // sync currentId with actual player
   try {
     const data = player.getVideoData();
     if (data && data.video_id) currentId = data.video_id;
@@ -112,8 +111,12 @@ function startCountdownAndNext(){
       clearInterval(countdownTimer);
       countdown.classList.add('hidden');
       countdownActive = false;
-      skipNextEnded = true; // prevent double trigger
-      nextVideoFromStart();
+      // ✅ only next if video really ended
+      const remain = Math.max(0, player.getDuration() - player.getCurrentTime());
+      if (remain <= 1.5){
+        skipNextEnded = true;
+        nextVideoFromStart();
+      }
     }else{
       countdown.textContent = sec;
     }
@@ -125,7 +128,7 @@ function onPlayerStateChange(e){
     hasPlayedOnce = true;
   }
   if (e.data === YT.PlayerState.ENDED){
-    if (!hasPlayedOnce){ hasPlayedOnce = true; return; } // ignore first stray event
+    if (!hasPlayedOnce){ hasPlayedOnce = true; return; }
     if (skipNextEnded){ skipNextEnded = false; return; }
     nextVideoFromStart();
   }
@@ -137,6 +140,7 @@ async function post(path, body){
   return r.json().catch(()=>({}));
 }
 
+// ✅ fix: sync currentId immediately when first load
 async function refresh(force=false){
   if (!isLoggedIn){ await loginRequired(); return; }
   const s = await (await fetch('/api/state')).json();
@@ -148,6 +152,7 @@ async function refresh(force=false){
   }
   const cid = s.current && s.current.id;
   const prog = s.progress || {};
+  if (!currentId && cid) currentId = cid;
   if (cid && player){
     const nowId = player.getVideoData().video_id;
     if ((cid !== currentId) || (force && nowId !== cid)){
