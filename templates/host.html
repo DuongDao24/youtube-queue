@@ -15,22 +15,21 @@
       <h1 class="text-3xl font-bold">{{ app_title }} — Host</h1>
     </div>
 
+    <!-- 🎛️ Control panel -->
+    <div class="bg-white rounded-2xl shadow p-5 space-y-3">
+      <h2 class="font-semibold">⚙️ YouTube Queue Control — Options</h2>
+      <div class="flex flex-wrap items-center gap-3">
+        <button id="btnPrev" class="btn">⏮ Prev</button>
+        <button id="btnPlay" class="btn-primary">▶ Start</button>
+        <button id="btnNext" class="btn">⏭ Next</button>
+        <button id="btnClear" class="btn">🗑 Clear</button>
+      </div>
+      <div id="actionStatus" class="text-sm text-gray-500"></div>
+    </div>
+
+    <!-- 🖥️ Main layout -->
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
       <div class="lg:col-span-2 space-y-4">
-        <div class="bg-white rounded-2xl shadow p-5 space-y-3">
-          <h2 class="font-semibold">⚙️ YouTube Queue Control — Options</h2>
-          <div class="flex flex-wrap items-center gap-2">
-            <input id="key" type="password" class="border rounded-xl px-3 py-2 w-64" placeholder="HOST_API_KEY">
-            <button id="saveKey" class="btn">Save key</button>
-            <button id="btnPlay" class="btn-primary">Play ▶</button>
-            <button id="btnPrev" class="btn">Prev ⏮</button>
-            <button id="btnNext" class="btn">Next ⏭</button>
-            <button id="btnClear" class="btn">Clear 🗑</button>
-            <button id="btnReload" class="btn">Reload 🔄</button>
-          </div>
-          <div id="authNotice" class="text-sm text-red-600"></div>
-        </div>
-
         <div class="bg-white rounded-2xl shadow p-5">
           <h2 class="font-semibold mb-3">Now Playing</h2>
           <div class="relative">
