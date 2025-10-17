@@ -69,20 +69,24 @@ Cập nhật thêm:
         <div class="neu-card section stack w-full max-w-full">
           <h2 class="font-semibold mb-3">System Settings</h2>
 
-        <!-- từng hàng setting -->
+        <!-- Submit limit -->
         <div class="flex items-center justify-between gap-3">
           <label class="text-sm text-gray-600 whitespace-nowrap">Submit limit (seconds)</label>
           <input id="rate" type="number" min="10" step="10" class="neu-inset px-3 py-2 w-28 text-center">
         </div>
 
-        <!-- sau này có thể thêm các hàng khác tương tự ở đây -->
+        <!-- Nickname limit -->
+        <div class="flex items-center justify-between gap-3">
+          <label class="text-sm text-gray-600 whitespace-nowrap">Nickname limit (minutes)</label>
+          <input id="nickLimit" type="number" min="1" step="1" class="neu-inset px-3 py-2 w-28 text-center">
+        </div>
 
-        <!-- nút Save nằm riêng hàng cuối -->
+        <!-- Save button -->
         <div class="pt-3">
           <button id="btnSaveCfg" class="neu-btn neu-btn-primary w-full">Save settings</button>
-          </div>
+        </div>
       </div>
-
+       
         <!-- Recent history -->
         <div class="neu-card section">
           <h2 class="font-semibold mb-3">Recent history</h2>
