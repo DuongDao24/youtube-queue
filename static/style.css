@@ -159,3 +159,8 @@ a{ color:var(--accent); }
   max-width: 100%;
 }
 
+/* ---- Hiệu ứng mờ nền khi Host chưa được xác minh ---- */
+body.blurred {
+  filter: blur(8px);
+  pointer-events: none;
+  user-select: none;
