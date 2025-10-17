@@ -17,7 +17,11 @@ Thay đổi: thêm class .neu-card, .neu-inset, .neu-btn, .neu-item, progress in
   <div class="max-w-6xl mx-auto p-6 stack">
     <!-- Header -->
     <div class="flex items-center gap-4">
-      {% if logo_url %}<img src="{{ logo_url }}" class="h-10 w-auto rounded-xl" alt="logo">{% endif %}
+      {% if logo_url %}
+      <div class="neu-pill p-2">
+        <img src="{{ logo_url }}" class="h-8 w-8 rounded-md" alt="logo">
+      </div>
+      {% endif %}
       <h1 class="text-3xl font-bold">{{ app_title }}</h1>
     </div>
 
