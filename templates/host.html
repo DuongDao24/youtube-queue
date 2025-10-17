@@ -64,15 +64,24 @@ Cập nhật thêm:
 
       <!-- Right: Settings + History -->
       <div class="stack">
+
         <!-- System Settings -->
-        <div class="neu-card section stack">
-          <h2 class="font-semibold mb-2">System Settings</h2>
-          <div class="flex items-center gap-4">
-            <label class="text-sm text-gray-600 whitespace-nowrap">Submit limit (seconds)</label>
-            <input id="rate" type="number" min="10" step="10" class="neu-inset px-3 py-2 w-24">
-            <button id="btnSaveCfg" class="neu-btn neu-btn-primary">Save settings</button>
-          </div>
+        <div class="neu-card section stack w-full max-w-full">
+          <h2 class="font-semibold mb-3">System Settings</h2>
+
+        <!-- từng hàng setting -->
+        <div class="flex items-center justify-between gap-3">
+          <label class="text-sm text-gray-600 whitespace-nowrap">Submit limit (seconds)</label>
+          <input id="rate" type="number" min="10" step="10" class="neu-inset px-3 py-2 w-28 text-center">
         </div>
+
+        <!-- sau này có thể thêm các hàng khác tương tự ở đây -->
+
+        <!-- nút Save nằm riêng hàng cuối -->
+        <div class="pt-3">
+          <button id="btnSaveCfg" class="neu-btn neu-btn-primary w-full">Save settings</button>
+          </div>
+      </div>
 
         <!-- Recent history -->
         <div class="neu-card section">
