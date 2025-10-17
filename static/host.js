@@ -1,7 +1,7 @@
 // ==========================================================
 // YouTube Queue Online — v01.6.1
 // Ngày cập nhật: 17/10/2025
-// Thay đổi: dùng HOST_KEY từ backend; mọi POST gửi header xác thực; auto-next
+// Loại cập nhật: Hiển thị "by nickname (IP)" + chỉnh nickLimit
 // ==========================================================
 
 const qs = (s) => document.querySelector(s);
@@ -19,17 +19,26 @@ function headersAuth() {
     : { "Content-Type": "application/json" };
 }
 
+function who(it) {
+  const n = it.by_name || "-";
+  const ip = it.by_ip ? ` (${it.by_ip})` : "";
+  return `by ${n}${ip}`;
+}
 function rQueue(it) {
-  return `<div class="item">
+  return `<div class="item neu-item">
     <img class="thumb" src="https://i.ytimg.com/vi/${it.id}/default.jpg" alt="thumb">
-    <div class="flex-1">${it.title||it.id}</div>
-    <button class="btn" data-id="${it.id}">Remove</button>
+    <div class="flex-1">
+      <div class="font-medium">${it.title||it.id}</div>
+      <div class="small">${who(it)}</div>
+    </div>
+    <button class="neu-btn remove-btn" data-id="${it.id}">Remove</button>
   </div>`;
 }
 function rHistory(it) {
-  return `<div class="item">
+  return `<div class="item neu-item">
     <img class="thumb" src="https://i.ytimg.com/vi/${it.id}/default.jpg" alt="thumb">
     <div class="text-sm">${it.title||it.id}</div>
+    <div class="small ml-auto">${who(it)}</div>
   </div>`;
 }
 
@@ -68,12 +77,22 @@ async function refresh() {
     const s = await (await fetch("/api/state")).json();
     queueEl.innerHTML = (s.queue||[]).map(rQueue).join("") || '<div class="small">Queue empty</div>';
     historyEl.innerHTML = (s.history||[]).slice(0,15).map(rHistory).join("") || '<div class="small">No history</div>';
-    if (!editingRate) { qs("#rate").value = (s.config && s.config.rate_limit_s) || 180; }
+
+    if (!editingRate) {
+      if (qs("#rate")) qs("#rate").value = (s.config && s.config.rate_limit_s) || 180;
+      if (qs("#nickLimit")) qs("#nickLimit").value = (s.config && s.config.nickname_valid_minutes) || 60;
+    }
+
     const cid = s.current && s.current.id;
     if (cid && cid !== currentId && player) {
       currentId = cid;
       player.loadVideoById({ videoId: cid, startSeconds: 0, suggestedQuality: "large" });
     }
+
+    // bind remove buttons
+    queueEl.querySelectorAll("[data-id]").forEach(btn => {
+      btn.onclick = async () => { await post("/api/remove", { id: btn.dataset.id }); await refresh(); };
+    });
   } catch (e) { }
 }
 
@@ -97,23 +116,30 @@ qs("#btnNext").onclick = async () => { await post("/api/next", {}); await refres
 qs("#btnPrev").onclick = async () => { await post("/api/prev", {}); await refresh(); };
 qs("#btnClear").onclick = async () => { await post("/api/clear", {}); await refresh(); };
 
-qs("#btnLogo").onclick = async () => {
-  const f = qs("#logo").files[0];
-  if (!f) { alert("Please choose a logo file first."); return; }
-  const fd = new FormData(); fd.append("logo", f);
-  const r = await fetch("/api/logo", { method: "POST", headers: HOST_KEY ? { "X-Host-Key": HOST_KEY } : {}, body: fd });
-  const d = await r.json().catch(() => ({}));
-  if (r.ok && d.ok) { alert("✅ Logo uploaded successfully!"); setTimeout(() => location.reload(), 600); }
-  else { alert("❌ Upload failed: " + (d.error || "Unknown error")); }
-};
+const btnLogo = qs("#btnLogo");
+if (btnLogo) {
+  btnLogo.onclick = async () => {
+    const f = qs("#logo").files[0];
+    if (!f) { alert("Please choose a logo file first."); return; }
+    const fd = new FormData(); fd.append("logo", f);
+    const r = await fetch("/api/logo", { method: "POST", headers: HOST_KEY ? { "X-Host-Key": HOST_KEY } : {}, body: fd });
+    const d = await r.json().catch(() => ({}));
+    if (r.ok && d.ok) { alert("✅ Logo uploaded successfully!"); setTimeout(() => location.reload(), 600); }
+    else { alert("❌ Upload failed: " + (d.error || "Unknown error")); }
+  };
+}
 
-qs("#btnSaveCfg").onclick = async () => {
-  const v = parseInt(qs("#rate").value || "180", 10);
-  const r = await fetch("/api/config", { method: "POST", headers: headersAuth(), body: JSON.stringify({ rate_limit_s: v }) });
-  const d = await r.json().catch(() => ({}));
-  if (r.ok && d.ok) { alert(`✅ Saved! New limit: ${v}s`); await refresh(); }
-  else { alert("❌ Save failed: " + (d.error || "Unknown error")); }
-};
+const saveBtn = qs("#btnSaveCfg");
+if (saveBtn) {
+  saveBtn.onclick = async () => {
+    const v = parseInt(qs("#rate").value || "180", 10);
+    const m = parseInt(qs("#nickLimit").value || "60", 10);
+    const r = await fetch("/api/config", { method: "POST", headers: headersAuth(), body: JSON.stringify({ rate_limit_s: v, nickname_valid_minutes: m }) });
+    const d = await r.json().catch(() => ({}));
+    if (r.ok && d.ok) { alert(`✅ Saved! Limit: ${v}s, Nickname window: ${m}m`); await refresh(); }
+    else { alert("❌ Save failed: " + (d.error || "Unknown error")); }
+  };
+}
 
 const rateInput = qs("#rate");
 if (rateInput) {
@@ -121,6 +147,5 @@ if (rateInput) {
   rateInput.addEventListener("blur", () => { editingRate = false; });
 }
 
-if (window.YT && window.YT.Player) { window.onYouTubeIframeAPIReady(); }
 refresh();
 setInterval(refresh, 2000);
