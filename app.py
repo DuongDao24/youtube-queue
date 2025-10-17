@@ -1,16 +1,15 @@
 # =========================================================
-# YouTube Queue Online — v01.6.1
+# YouTube Queue Online — v01.6.2
 # Ngày cập nhật: 17/10/2025
-# Loại cập nhật: Logic nickname (bắt buộc trước khi submit)
-# Thay đổi chính:
-# - Lưu nickname theo IP trong file riêng nicknames.json
-# - Cấu hình nickname_valid_minutes (mặc định 60), chỉnh trong /api/config (Host)
-# - Bổ sung API: GET/POST /api/nickname
-# - /api/add bắt buộc nickname còn hiệu lực, item lưu by_name + by_ip
-# - /api/state trả về queue/history có by_name (user thấy), host thấy by_name (IP)
+# Loại cập nhật: Bảo vệ trang Host + Đổi mật khẩu Host
+# Thay đổi chính (so với v01.6.1):
+# - Thêm trường cấu hình: host_password_hash (SHA256)
+# - API mới: POST /api/host/verify  (xác minh mật khẩu host)
+# - API mới: POST /api/host/change_password (đổi mật khẩu; yêu cầu HOST_API_KEY)
+# - KHÔNG thay đổi các API/logic khác (queue, nickname, logo upload, settings)
 # =========================================================
 
-import os, json, time, re
+import os, json, time, re, hashlib
 from collections import deque
 from urllib.parse import urlparse, parse_qs
 from flask import Flask, request, jsonify, render_template, redirect
@@ -22,27 +21,29 @@ HOST_API_KEY    = os.environ.get("HOST_API_KEY", "ytp-premium-2025-dxd")
 ENV_RATE_LIMIT  = int(os.environ.get("RATE_LIMIT_S", "180"))
 PERSIST_PATH    = os.environ.get("PERSIST_PATH", "queue_data.json")
 CONFIG_PATH     = os.environ.get("CONFIG_PATH", "config.json")
-NICK_PATH       = os.environ.get("NICK_PATH", "nicknames.json")  # 🔸 NEW
+NICK_PATH       = os.environ.get("NICK_PATH", "nicknames.json")
 STATIC_DIR      = os.path.join(os.path.dirname(__file__), "static")
 ALLOWED_LOGO_EXT = {".png", ".jpg", ".jpeg", ".gif"}
 
 app = Flask(__name__)
 
-# In-memory state
+# ------------------ Runtime state ------------------
 queue = deque()
 history = deque(maxlen=300)
 current = None
 last_submit_ts = {}
 last_progress = {"videoId": None, "pos": 0, "dur": 0, "ts": 0, "ended": False}
 
-# App config (persist to CONFIG_PATH)
+# ------------------ App config ------------------
+# v01.6.2: thêm host_password_hash
 config = {
     "rate_limit_s": ENV_RATE_LIMIT,
     "logo_path": None,
-    "nickname_valid_minutes": 60,       # 🔸 NEW (Host có thể chỉnh)
+    "nickname_valid_minutes": 60,
+    "host_password_hash": None,  # SHA256(password) hoặc None nếu chưa đặt
 }
 
-# Nickname store (persist to NICK_PATH)
+# ------------------ Nicknames store ------------------
 # {"<ip>": {"name": "<nick>", "set_ts": <epoch_seconds>}}
 nicknames = {}
 
@@ -101,6 +102,7 @@ def load_config():
                 config["rate_limit_s"] = int(data.get("rate_limit_s", ENV_RATE_LIMIT))
                 config["logo_path"] = data.get("logo_path")
                 config["nickname_valid_minutes"] = int(data.get("nickname_valid_minutes", 60))
+                config["host_password_hash"] = data.get("host_password_hash")
         except Exception as e:
             print("load_config error:", e)
 
@@ -116,7 +118,7 @@ def load_nicks():
     if os.path.exists(NICK_PATH):
         try:
             with open(NICK_PATH, "r", encoding="utf-8") as f:
-                raw = f.read().strip() or "{}"
+                raw = f.read().strip() or "{}"  # v01.6.2: tự chữa nếu file rỗng
                 nicknames = json.loads(raw)
         except Exception as e:
             print("load_nicks error:", e)
@@ -135,7 +137,6 @@ def get_nick_valid_minutes():
     return max(1, int(config.get("nickname_valid_minutes", 60)))
 
 def client_ip():
-    # Render free tier thường chạy sau proxy => ưu tiên X-Forwarded-For nếu có
     xff = request.headers.get("X-Forwarded-For", "")
     if xff:
         return xff.split(",")[0].strip()
@@ -148,19 +149,15 @@ def is_nickname_valid(ip):
     remain = rec["set_ts"] + minutes * 60 - time.time()
     return remain > 0, rec["name"], max(0, int(remain // 60))
 
-# nickname validator: 3-15 kí tự, chỉ a-z A-Z 0-9 hoặc emoji/icon (Unicode non-ASCII)
 def validate_nickname(s: str):
     if not isinstance(s, str): return False
     s = s.strip()
     if len(s) < 3 or len(s) > 15: return False
-    # cho phép: ASCII chữ-số; hoặc ký tự unicode ngoài ASCII (icon/emoji)
     for ch in s:
         if "0" <= ch <= "9" or "a" <= ch <= "z" or "A" <= ch <= "Z":
             continue
-        # cho phép các ký tự unicode ngoài ASCII (emoji/icon)
-        if ord(ch) > 127:
+        if ord(ch) > 127:  # cho phép emoji/icon Unicode
             continue
-        # nếu là ASCII khác (khoảng trắng ở giữa cũng không cho để gọn) => từ chối
         return False
     return True
 
@@ -193,14 +190,13 @@ def page_user():
 def page_host():
     return render_template("host.html", app_title=APP_TITLE, logo_url=get_logo_url(), host_key=HOST_API_KEY)
 
-# ----- Nickname APIs -----
+# ------------------ Nickname APIs ------------------
 @app.route("/api/nickname", methods=["GET", "POST"])
 def api_nickname():
     ip = client_ip()
     if request.method == "GET":
         valid, name, remain = is_nickname_valid(ip)
         return jsonify({"ok": True, "valid": valid, "name": name, "remain_mins": remain, "limit_mins": get_nick_valid_minutes()})
-    # POST set nickname
     data = request.get_json(silent=True) or {}
     name = (data.get("name") or "").strip()
     if not validate_nickname(name):
@@ -209,11 +205,10 @@ def api_nickname():
     save_nicks()
     return jsonify({"ok": True, "name": name, "limit_mins": get_nick_valid_minutes()})
 
-# ----- State -----
+# ------------------ State ------------------
 @app.route("/api/state")
 def api_state():
     global last_progress
-    # auto next nếu client báo ended
     if last_progress.get("ended") and queue:
         if current: history.appendleft(current)
         set_next_current()
@@ -230,20 +225,18 @@ def api_state():
         }
     })
 
-# ----- Add video (require nickname) -----
+# ------------------ Add video (require nickname) ------------------
 @app.route("/api/add", methods=["POST"])
 def api_add():
     data = request.get_json(silent=True) or {}
     url  = (data.get("url") or "").strip()
     ip   = client_ip()
 
-    # rate limit per IP
     now = time.time()
     remain = get_rate_limit_s() - int(now - last_submit_ts.get(ip, 0))
     if remain > 0:
         return jsonify({"ok": False, "error": f"Please wait {remain}s."}), 429
 
-    # nickname requirement
     valid, name, _ = is_nickname_valid(ip)
     if not valid:
         return jsonify({"ok": False, "error": "Please set your nickname first."}), 403
@@ -253,7 +246,7 @@ def api_add():
         return jsonify({"ok": False, "error": "Paste a YouTube video link (not playlist)."}), 400
 
     title = fetch_title(vid)
-    item = {"id": vid, "title": title, "by_name": name, "by_ip": ip, "ts": int(now)}  # 🔸 store both
+    item = {"id": vid, "title": title, "by_name": name, "by_ip": ip, "ts": int(now)}
     queue.append(item)
     last_submit_ts[ip] = now
 
@@ -263,7 +256,7 @@ def api_add():
     save_state()
     return jsonify({"ok": True, "item": item})
 
-# ----- Config -----
+# ------------------ Config ------------------
 @app.route("/api/config", methods=["GET", "POST"])
 def api_config():
     if request.method == "GET":
@@ -300,7 +293,7 @@ def api_config():
     if updated: save_config()
     return jsonify({"ok": True, "rate_limit_s": get_rate_limit_s(), "nickname_valid_minutes": get_nick_valid_minutes(), "logo_url": get_logo_url()})
 
-# ----- Logo upload (unchanged logic) -----
+# ------------------ Logo upload ------------------
 @app.route("/api/logo", methods=["POST"])
 def api_logo():
     unauth = require_host_key()
@@ -332,7 +325,7 @@ def api_logo():
 
     return jsonify({"ok": True, "logo_url": f"/{config['logo_path']}?t={int(time.time())}"})
 
-# ----- Host controls (unchanged) -----
+# ------------------ Host controls ------------------
 @app.route("/api/play", methods=["POST"])
 def api_play():
     unauth = require_host_key()
@@ -343,7 +336,6 @@ def api_play():
     if vid:
         if current: history.appendleft(current)
         title = fetch_title(vid)
-        # by_name/by_ip không có khi host tự play => gán 'host'
         current = {"id": vid, "title": title, "by_name": "host", "by_ip": "host", "ts": int(time.time())}
         save_state()
     else:
@@ -415,6 +407,39 @@ def api_progress():
         set_next_current()
         last_progress["ended"] = False
     return jsonify({"ok": True})
+
+# ------------------ Host password APIs (NEW) ------------------
+@app.route("/api/host/verify", methods=["POST"])
+def api_host_verify():
+    data = request.get_json(silent=True) or {}
+    pw = (data.get("password") or "").strip()
+    if not pw:
+        return jsonify({"ok": False, "error": "Empty password"}), 400
+    h = hashlib.sha256(pw.encode()).hexdigest()
+    if h == config.get("host_password_hash"):
+        return jsonify({"ok": True})
+    return jsonify({"ok": False, "error": "Wrong password"}), 403
+
+@app.route("/api/host/change_password", methods=["POST"])
+def api_host_change_password():
+    data = request.get_json(silent=True) or {}
+    old_pw = (data.get("old_password") or "").strip()
+    new_pw = (data.get("new_password") or "").strip()
+    key = (data.get("key") or "").strip()
+
+    if key != HOST_API_KEY:
+        return jsonify({"ok": False, "error": "Invalid HOST_KEY"}), 401
+    if not new_pw or len(new_pw) < 3:
+        return jsonify({"ok": False, "error": "New password too short"}), 400
+
+    old_hash = hashlib.sha256(old_pw.encode()).hexdigest() if old_pw else None
+    if config.get("host_password_hash") and old_hash != config["host_password_hash"]:
+        return jsonify({"ok": False, "error": "Wrong current password"}), 403
+
+    new_hash = hashlib.sha256(new_pw.encode()).hexdigest()
+    config["host_password_hash"] = new_hash
+    save_config()
+    return jsonify({"ok": True, "msg": "Password updated successfully"})
 
 @app.route("/healthz")
 def healthz():
