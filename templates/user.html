@@ -25,6 +25,19 @@ Thay đổi: thêm class .neu-card, .neu-inset, .neu-btn, .neu-item, progress in
       <h1 class="text-3xl font-bold">{{ app_title }}</h1>
     </div>
 
+      <!-- Nickname box -->
+      <div class="neu-card section stack">
+        <h2 class="font-semibold">Your nickname</h2>
+      
+        <div id="nickInfo" class="small"></div>
+      
+        <form id="nickForm" class="flex items-center gap-3">
+          <input id="nickInput" class="neu-inset px-3 py-2" placeholder="Enter nickname (3–15 chars)" maxlength="15" required>
+          <button id="nickSave" class="neu-btn">Save name</button>
+        </form>
+        <div id="nickMsg" class="small"></div>
+      </div>
+
     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
       <!-- Add form -->
       <div class="neu-card section stack">
