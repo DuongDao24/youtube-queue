@@ -1,22 +1,126 @@
 /* =========================================================
    YouTube Queue Online — v01.6.1
    Ngày cập nhật: 17/10/2025
-   Thay đổi: Giữ nguyên style v01.6, có ellipsis chống tràn
+   Loại cập nhật: UI Neumorphism (chỉ thay đổi hiển thị)
+   Thay đổi:
+   - Bổ sung theme nền xám sáng, card nổi/lõm, pills, buttons
+   - Không đụng JS/logic; chỉ CSS + utility class
    ========================================================= */
-.btn{ padding:8px 12px; border-radius:12px; border:1px solid #ddd; background:#f7f8fa; }
-.btn-primary{ padding:8px 12px; border-radius:12px; background:#2563eb; color:#fff; }
-.countdown-badge{
-  position:absolute; right:10px; bottom:10px;
-  background:rgba(0,0,0,0.75); color:#fff;
-  padding:8px 12px; border-radius:9999px;
-  font-weight:700; font-size:20px; transform:scale(1);
-  transition: transform .2s ease, opacity .2s ease;
-}
-.hidden{ display:none; }
-.item{ display:flex; align-items:center; gap:10px; }
-.thumb{ width:80px; height:56px; border-radius:10px; object-fit:cover; background:#eee; }
-.small{ font-size:12px; color:#666; }
 
+/* ---------- Theme tokens ---------- */
+:root{
+  --bg: #EEF2F5;             /* nền tổng thể */
+  --bg-card: #EEF2F5;         /* nền card (cùng màu để liền khối) */
+  --text-1: #1F2937;          /* xám đậm */
+  --text-2: #6B7280;          /* xám nhẹ */
+  --accent: #2563EB;          /* xanh điểm nhấn (giữ brand hiện tại) */
+
+  --shadow-dark: 10px 10px 20px rgba(163,177,198,.6);
+  --shadow-light: -10px -10px 20px #FFFFFF;
+
+  --inset-dark: inset 6px 6px 12px rgba(163,177,198,.35);
+  --inset-light: inset -6px -6px 12px #FFFFFF;
+
+  --radius-lg: 22px;
+  --radius-md: 16px;
+  --radius-sm: 12px;
+
+  --gap: 14px;
+}
+
+/* ---------- Base reset ---------- */
+html,body{ background:var(--bg); color:var(--text-1); }
+a{ color:var(--accent); }
+.small{ font-size:12px; color:var(--text-2); }
+
+/* ---------- Neumorphism atoms ---------- */
+.neu-card{
+  background: var(--bg-card);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-dark), var(--shadow-light);
+}
+
+.neu-inset{
+  background: var(--bg-card);
+  border-radius: var(--radius-md);
+  box-shadow: var(--inset-dark), var(--inset-light);
+  border: none;
+  color: var(--text-1);
+}
+.neu-inset::placeholder{ color: #9CA3AF; }
+
+.neu-btn{
+  appearance:none; border:none; cursor:pointer;
+  padding:10px 14px; border-radius: var(--radius-md);
+  background: var(--bg-card);
+  box-shadow: var(--shadow-dark), var(--shadow-light);
+  color: var(--text-1); font-weight:600;
+  transition: transform .08s ease, box-shadow .18s ease, filter .18s ease;
+}
+.neu-btn:hover{ transform: translateY(-1px); filter: brightness(1.02); }
+.neu-btn:active{ transform: translateY(1px); }
+
+.neu-btn-primary{
+  color:#fff; background: var(--accent);
+  box-shadow: 6px 6px 14px rgba(37,99,235,.35), -6px -6px 14px rgba(255,255,255,.6);
+}
+
+.neu-pill{
+  background: var(--bg-card);
+  border-radius: 9999px;
+  box-shadow: var(--shadow-dark), var(--shadow-light);
+  padding:8px 12px;
+}
+
+.neu-item{
+  display:flex; align-items:center; gap:12px;
+  background: var(--bg-card);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-dark), var(--shadow-light);
+  padding:10px 12px;
+}
+.neu-item:hover{ transform: translateY(-1px); transition: transform .08s ease; }
+
+.thumb{ width:80px; height:56px; border-radius: 14px; object-fit:cover; background:#E5E7EB; }
 .item .flex-1 div:first-child { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 #playing .font-semibold { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; display:block; max-width:100%; }
 #history .item { align-items:flex-start; }
+
+/* ---------- Buttons (mapping từ bản cũ) ---------- */
+.btn{ composes: neu-btn; }             /* nếu HTML cũ có .btn */
+.btn-primary{ composes: neu-btn neu-btn-primary; }
+
+/* fallback nếu build không hỗ trợ CSS Modules 'composes' */
+.btn{ appearance:none; border:none; cursor:pointer; padding:10px 14px; border-radius:var(--radius-md); background:var(--bg-card); box-shadow:var(--shadow-dark), var(--shadow-light); color:var(--text-1); font-weight:600; transition:transform .08s, box-shadow .18s, filter .18s; }
+.btn:hover{ transform:translateY(-1px); filter:brightness(1.02); }
+.btn:active{ transform:translateY(1px); }
+.btn-primary{ color:#fff; background:var(--accent); box-shadow:6px 6px 14px rgba(37,99,235,.35), -6px -6px 14px rgba(255,255,255,.6); }
+
+/* ---------- Progress bar kiểu inset ---------- */
+.progress-track{
+  height: 9px; border-radius: 9999px; overflow:hidden;
+  background: var(--bg-card);
+  box-shadow: var(--inset-dark), var(--inset-light);
+}
+.progress-fill{
+  height:100%; width:0%; border-radius:9999px; background: var(--accent);
+}
+
+/* ---------- Player countdown badge ---------- */
+.countdown-badge{
+  position:absolute; right:10px; bottom:10px;
+  background:rgba(0,0,0,.75); color:#fff;
+  padding:8px 12px; border-radius:9999px;
+  font-weight:700; font-size:20px;
+  transition: transform .2s ease, opacity .2s ease;
+}
+.hidden{ display:none; }
+
+/* ---------- Containers spacing ---------- */
+.section{ padding:20px; border-radius: var(--radius-lg); }
+.stack{ display:grid; gap: var(--gap); }
+
+/* ---------- List layout for queue/history ---------- */
+.list{ display:grid; gap: var(--gap); }
+.item{ display:flex; align-items:center; gap:12px; }
+.remove-btn{ margin-left:auto; }
