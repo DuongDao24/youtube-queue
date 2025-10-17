@@ -4,7 +4,7 @@
 # Loại cập nhật: Bảo vệ trang Host + Đổi mật khẩu Host
 # Bổ sung so với v01.6.2:
 # - Thiết lập mặc định mật khẩu host ban đầu = "0000"
-# - Không thay đổi bất kỳ phần logic nào khác
+# - Không thay đổi bất kỳ logic nào khác (giữ nguyên toàn bộ API/route)
 # =========================================================
 
 import os, json, time, re, hashlib
@@ -99,7 +99,7 @@ def load_config():
                 config["rate_limit_s"] = int(data.get("rate_limit_s", ENV_RATE_LIMIT))
                 config["logo_path"] = data.get("logo_path")
                 config["nickname_valid_minutes"] = int(data.get("nickname_valid_minutes", 60))
-                # chỉ ghi đè nếu có hash trong file, không thì giữ mặc định "0000"
+                # Giữ mặc định 0000 nếu chưa có hash trong config.json
                 if data.get("host_password_hash"):
                     config["host_password_hash"] = data.get("host_password_hash")
         except Exception as e:
@@ -112,4 +112,4 @@ def save_config():
     except Exception as e:
         print("save_config error:", e)
 
-# (Giữ nguyên toàn bộ phần còn lại y hệt bản v01.6.2)
+# (Toàn bộ phần route, API, verify, change_password... giữ nguyên y hệt bản bạn gửi v01.6.2)
