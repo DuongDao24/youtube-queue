@@ -1,4 +1,4 @@
-// YouTube Queue Online — v01.6 (host)
+// YouTube Queue Online — v01.6a (host, fix input refresh bug)
 let HOST_KEY = localStorage.getItem("HOST_KEY") || "";
 const qs = (s)=>document.querySelector(s);
 const queueEl = qs("#queue");
@@ -9,6 +9,7 @@ let player = null;
 let currentId = null;
 let tickTimer = null;
 let wrongKeyShown = false;
+let editingRate = false; // ✅ chống ghi đè khi đang gõ
 
 function headersAuth(){
   return HOST_KEY ? {"Content-Type":"application/json","X-Host-Key":HOST_KEY} : {"Content-Type":"application/json"};
@@ -54,7 +55,6 @@ async function post(path, body){
   if (r.status === 401 && !wrongKeyShown){
     wrongKeyShown = true;
     if (authNotice) authNotice.textContent = "Wrong HOST_API_KEY. Enter the correct key and press Save key.";
-    // no alert spam
   }
   return r.json().catch(()=>({}));
 }
@@ -64,7 +64,11 @@ async function refresh(){
     const s = await (await fetch('/api/state')).json();
     queueEl.innerHTML = (s.queue||[]).map(rQueue).join("") || '<div class="small">Queue empty</div>';
     historyEl.innerHTML = (s.history||[]).slice(0,15).map(rHistory).join("") || '<div class="small">No history</div>';
-    qs("#rate").value = (s.config && s.config.rate_limit_s) || 180;
+
+    // ✅ chỉ update khi không đang nhập
+    if (!editingRate) {
+      qs("#rate").value = (s.config && s.config.rate_limit_s) || 180;
+    }
 
     const cid = s.current && s.current.id;
     if (cid && cid !== currentId && player){
@@ -125,6 +129,13 @@ queueEl.addEventListener('click', async (e)=>{
     await post('/api/remove', {id: e.target.dataset.id}); refresh();
   }
 });
+
+// ✅ thêm event để tạm dừng refresh khi nhập
+const rateInput = qs("#rate");
+if (rateInput){
+  rateInput.addEventListener("input", ()=>{ editingRate = true; });
+  rateInput.addEventListener("blur", ()=>{ editingRate = false; });
+}
 
 // bootstrap: if API is already loaded
 if (window.YT && window.YT.Player){ window.onYouTubeIframeAPIReady(); }
