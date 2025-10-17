@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: youtube-queue
+    env: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app --workers=2 --threads=4 --timeout=120
+    envVars:
+      - key: HOST_API_KEY
+        value: "0000"
+      - key: RATE_LIMIT_S
+        value: "180"

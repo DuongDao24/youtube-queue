@@ -1,0 +1,75 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>{{ app_title }} - Host</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="/static/style.css">
+  <script src="https://www.youtube.com/iframe_api"></script>
+</head>
+<body class="bg-gray-50 text-gray-900">
+  <div class="max-w-7xl mx-auto p-6 space-y-6">
+    <div class="flex items-center gap-4">
+      {% if logo_url %}<img src="{{ logo_url }}" class="h-10 w-auto rounded-md shadow-sm" alt="logo">{% endif %}
+      <h1 class="text-3xl font-bold">{{ app_title }} — Host</h1>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div class="lg:col-span-2 space-y-4">
+        <div class="bg-white rounded-2xl shadow p-5 space-y-3">
+          <h2 class="font-semibold">⚙️ YouTube Queue Control — Options</h2>
+          <div class="flex flex-wrap items-center gap-2">
+            <input id="key" type="password" class="border rounded-xl px-3 py-2 w-64" placeholder="HOST_API_KEY">
+            <button id="saveKey" class="btn">Save key</button>
+            <button id="btnPlay" class="btn-primary">Play ▶</button>
+            <button id="btnPrev" class="btn">Prev ⏮</button>
+            <button id="btnNext" class="btn">Next ⏭</button>
+            <button id="btnClear" class="btn">Clear 🗑</button>
+            <button id="btnReload" class="btn">Reload 🔄</button>
+          </div>
+          <div id="authNotice" class="text-sm text-red-600"></div>
+        </div>
+
+        <div class="bg-white rounded-2xl shadow p-5">
+          <h2 class="font-semibold mb-3">Now Playing</h2>
+          <div class="relative">
+            <div id="player" class="w-full aspect-video rounded-xl overflow-hidden bg-black"></div>
+            <div id="countdown" class="countdown-badge hidden">3</div>
+          </div>
+        </div>
+
+        <div class="bg-white rounded-2xl shadow p-5">
+          <h2 class="font-semibold mb-3">Queue</h2>
+          <div id="queue" class="space-y-2"></div>
+        </div>
+      </div>
+
+      <div class="space-y-4">
+        <div class="bg-white rounded-2xl shadow p-5">
+          <h2 class="font-semibold mb-3">Settings</h2>
+          <div class="space-y-3">
+            <div>
+              <label class="text-sm text-gray-600">Submit limit (seconds)</label>
+              <input id="rate" type="number" min="10" step="10" class="border rounded-xl px-3 py-2 w-48">
+            </div>
+            <div>
+              <label class="text-sm text-gray-600">Logo (png/jpg/gif)</label>
+              <input id="logo" type="file" accept=".png,.jpg,.jpeg,.gif" class="block">
+              <button id="btnLogo" class="btn mt-2">Upload</button>
+            </div>
+            <button id="btnSaveCfg" class="btn-primary w-full">Save settings</button>
+          </div>
+        </div>
+
+        <div class="bg-white rounded-2xl shadow p-5">
+          <h2 class="font-semibold mb-3">Recent history</h2>
+          <div id="history" class="space-y-2"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/static/host.js"></script>
+</body>
+</html>
