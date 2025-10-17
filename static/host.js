@@ -1,147 +1,80 @@
-// YouTube Queue Online — v01.6a (host, fix input refresh bug)
-let HOST_KEY = localStorage.getItem("HOST_KEY") || "";
-const qs = (s)=>document.querySelector(s);
-const queueEl = qs("#queue");
-const historyEl = qs("#history");
-const countdown = qs("#countdown");
-const authNotice = qs("#authNotice");
-let player = null;
-let currentId = null;
-let tickTimer = null;
-let wrongKeyShown = false;
-let editingRate = false; // ✅ chống ghi đè khi đang gõ
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>{{ app_title }} - Host</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="/static/style.css">
+  <script src="https://www.youtube.com/iframe_api"></script>
+</head>
+<body class="bg-gray-50 text-gray-900">
+  <div class="max-w-7xl mx-auto p-6 space-y-6">
+    <div class="flex items-center gap-4">
+      {% if logo_url %}
+        <img src="{{ logo_url }}" class="h-10 w-auto rounded-md shadow-sm" alt="logo">
+      {% endif %}
+      <h1 class="text-3xl font-bold">{{ app_title }} — Host</h1>
+    </div>
 
-function headersAuth(){
-  return HOST_KEY ? {"Content-Type":"application/json","X-Host-Key":HOST_KEY} : {"Content-Type":"application/json"};
-}
+    <!-- 🎛️ Control panel -->
+    <div class="bg-white rounded-2xl shadow p-5 space-y-3">
+      <h2 class="font-semibold">⚙️ YouTube Queue Control — Options</h2>
+      <div class="flex flex-wrap items-center gap-3">
+        <button id="btnPrev" class="btn">⏮ Prev</button>
+        <button id="btnPlay" class="btn-primary">▶ Start</button>
+        <button id="btnNext" class="btn">⏭ Next</button>
+        <button id="btnClear" class="btn">🗑 Clear</button>
+      </div>
+      <div id="actionStatus" class="text-sm text-gray-500"></div>
+    </div>
 
-function rQueue(it){
-  return `<div class="item">
-    <img class="thumb" src="https://i.ytimg.com/vi/${it.id}/default.jpg" alt="thumb">
-    <div class="flex-1">${it.title||it.id}</div>
-    <button class="btn" data-id="${it.id}">Remove</button>
-  </div>`;
-}
-function rHistory(it){
-  return `<div class="item">
-    <img class="thumb" src="https://i.ytimg.com/vi/${it.id}/default.jpg" alt="thumb">
-    <div class="text-sm">${it.title||it.id}</div>
-  </div>`;
-}
+    <!-- 🖥️ Main layout -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div class="lg:col-span-2 space-y-4">
+        <div class="bg-white rounded-2xl shadow p-5">
+          <h2 class="font-semibold mb-3">Now Playing</h2>
+          <div class="relative">
+            <div id="player" class="w-full aspect-video rounded-xl overflow-hidden bg-black"></div>
+            <div id="countdown" class="countdown-badge hidden">3</div>
+          </div>
+        </div>
 
-window.onYouTubeIframeAPIReady = function(){
-  player = new YT.Player('player', {
-    videoId: '',
-    playerVars: { 'autoplay': 1, 'controls': 1 },
-    events: { 'onReady': onPlayerReady, 'onStateChange': onPlayerStateChange }
-  });
-}
+        <div class="bg-white rounded-2xl shadow p-5">
+          <h2 class="font-semibold mb-3">Queue</h2>
+          <div id="queue" class="space-y-2"></div>
+        </div>
+      </div>
 
-function onPlayerReady(){
-  refresh();
-  if (tickTimer) clearInterval(tickTimer);
-  tickTimer = setInterval(sendProgressTick, 1000);
-}
+      <div class="space-y-4">
+        <div class="bg-white rounded-2xl shadow p-5">
+          <h2 class="font-semibold mb-3">Settings</h2>
+          <div class="space-y-3">
+            <div>
+              <label class="text-sm text-gray-600">Submit limit (seconds)</label>
+              <input id="rate" type="number" min="10" step="10" class="border rounded-xl px-3 py-2 w-48">
+            </div>
+            <div>
+              <label class="text-sm text-gray-600">Logo (png/jpg/gif)</label>
+              <input id="logo" type="file" accept=".png,.jpg,.jpeg,.gif" class="block">
+              <button id="btnLogo" class="btn mt-2">Upload</button>
+            </div>
+            <button id="btnSaveCfg" class="btn-primary w-full">Save settings</button>
+          </div>
+        </div>
 
-function onPlayerStateChange(e){
-  if (e.data === YT.PlayerState.ENDED){
-    post('/api/progress', {ended:true, videoId: currentId, pos: player.getDuration(), dur: player.getDuration()})
-      .then(()=> setTimeout(refresh, 800));
-  }
-}
+        <div class="bg-white rounded-2xl shadow p-5">
+          <h2 class="font-semibold mb-3">Recent history</h2>
+          <div id="history" class="space-y-2"></div>
+        </div>
+      </div>
+    </div>
+  </div>
 
-async function post(path, body){
-  const r = await fetch(path, {method:'POST', headers: headersAuth(), body: JSON.stringify(body||{})});
-  if (r.status === 401 && !wrongKeyShown){
-    wrongKeyShown = true;
-    if (authNotice) authNotice.textContent = "Wrong HOST_API_KEY. Enter the correct key and press Save key.";
-  }
-  return r.json().catch(()=>({}));
-}
-
-async function refresh(){
-  try{
-    const s = await (await fetch('/api/state')).json();
-    queueEl.innerHTML = (s.queue||[]).map(rQueue).join("") || '<div class="small">Queue empty</div>';
-    historyEl.innerHTML = (s.history||[]).slice(0,15).map(rHistory).join("") || '<div class="small">No history</div>';
-
-    // ✅ chỉ update khi không đang nhập
-    if (!editingRate) {
-      qs("#rate").value = (s.config && s.config.rate_limit_s) || 180;
-    }
-
-    const cid = s.current && s.current.id;
-    if (cid && cid !== currentId && player){
-      currentId = cid;
-      player.loadVideoById({videoId: cid, startSeconds: 0, suggestedQuality: 'large'});
-    }
-  }catch(e){ /* ignore */ }
-}
-
-async function sendProgressTick(){
-  if (!player || !HOST_KEY) return;
-  try{
-    const dur = Number(player.getDuration() || 0);
-    const pos = Number(player.getCurrentTime() || 0);
-    const vid = currentId;
-    if (dur>0){
-      const remain = Math.max(0, dur - pos);
-      if (remain <= 3){
-        countdown.classList.remove('hidden');
-        countdown.textContent = Math.ceil(remain);
-      } else {
-        countdown.classList.add('hidden');
-      }
-    }
-    await post('/api/progress', {videoId: vid, pos, dur, ended: false});
-  }catch(e){}
-}
-
-// Controls
-qs("#saveKey").onclick = ()=>{
-  const v = qs("#key").value.trim();
-  if(!v){ alert("Enter HOST_API_KEY"); return; }
-  HOST_KEY = v; localStorage.setItem("HOST_KEY", HOST_KEY);
-  wrongKeyShown = false;
-  if (authNotice) authNotice.textContent = "Saved HOST_API_KEY.";
-};
-qs("#btnPlay").onclick = async()=>{ await post('/api/play', {}); await refresh(); };
-qs("#btnNext").onclick = async()=>{ await post('/api/next', {}); await refresh(); };
-qs("#btnPrev").onclick = async()=>{ await post('/api/prev', {}); await refresh(); };
-qs("#btnClear").onclick = async()=>{ await post('/api/clear', {}); await refresh(); };
-qs("#btnLogo").onclick = async()=>{
-  const f = qs("#logo").files[0];
-  if(!f){ alert("Choose file"); return; }
-  const fd = new FormData(); fd.append("logo", f);
-  const r = await fetch('/api/logo', {method:'POST', headers: HOST_KEY? {"X-Host-Key": HOST_KEY} : {}, body: fd});
-  if (r.status===401){ if (authNotice) authNotice.textContent = "Wrong HOST_API_KEY."; return; }
-  alert("Logo uploaded"); setTimeout(()=>location.reload(), 500);
-};
-qs("#btnSaveCfg").onclick = async()=>{
-  const v = parseInt(qs("#rate").value||"180", 10);
-  const r = await fetch('/api/config', {method:'POST', headers: headersAuth(), body: JSON.stringify({rate_limit_s: v})});
-  if (r.status===401){ if (authNotice) authNotice.textContent = "Wrong HOST_API_KEY."; return; }
-  if (authNotice) authNotice.textContent = "Saved settings.";
-  refresh();
-};
-queueEl.addEventListener('click', async (e)=>{
-  if (e.target.tagName === "BUTTON" && e.target.dataset.id){
-    await post('/api/remove', {id: e.target.dataset.id}); refresh();
-  }
-});
-
-// ✅ thêm event để tạm dừng refresh khi nhập
-const rateInput = qs("#rate");
-if (rateInput){
-  rateInput.addEventListener("input", ()=>{ editingRate = true; });
-  rateInput.addEventListener("blur", ()=>{ editingRate = false; });
-}
-
-// bootstrap: if API is already loaded
-if (window.YT && window.YT.Player){ window.onYouTubeIframeAPIReady(); }
-
-// Auto refresh queue/now-playing every 2s so host sees new user submissions
-refresh();
-setInterval(refresh, 2000);
-
-qs("#btnReload").onclick = refresh;
+  <!-- 🔑 Auto inject HOST_API_KEY from backend -->
+  <script>
+    const HOST_KEY = "{{ host_key }}";
+  </script>
+  <script src="/static/host.js"></script>
+</body>
+</html>
