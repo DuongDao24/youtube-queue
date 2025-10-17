@@ -1,368 +1,222 @@
-# ==========================================================
-# YouTube Queue Online — v01.6
-# Ngày cập nhật: 17/10/2025
-# Mô tả thay đổi trong bản này:
-#   ✅ Tự động truyền HOST_API_KEY từ backend (cho host.html)
-#   ✅ Cập nhật ngay giá trị Submit limit (seconds) khi host lưu
-#   ✅ Hiển thị logo mới ngay lập tức sau khi upload (không cần reload)
-#   ✅ Giữ nguyên cơ chế polling / auto-update của user
-# ==========================================================
+// ==========================================================
+// YouTube Queue Online — v01.6
+// Ngày cập nhật: 17/10/2025
+// Mô tả thay đổi:
+// ✅ Loại bỏ localStorage key (dùng HOST_KEY truyền từ server Flask)
+// ✅ Fix lỗi Upload & Save settings không gửi header xác thực
+// ✅ Giữ auto refresh 2s, thêm bảo vệ khi đang chỉnh input
+// ✅ Giữ layout mới: Prev – Start – Next – Clear
+// ==========================================================
 
-import os, json, time, re
-from collections import deque
-from urllib.parse import urlparse, parse_qs
-from flask import Flask, request, jsonify, render_template
-from werkzeug.utils import secure_filename
-import requests
+const qs = (s) => document.querySelector(s);
+const queueEl = qs("#queue");
+const historyEl = qs("#history");
+const countdown = qs("#countdown");
+let player = null;
+let currentId = null;
+let tickTimer = null;
+let editingRate = false; // chống ghi đè khi đang gõ số
 
-APP_TITLE      = os.environ.get("APP_TITLE", "YouTube Queue Online")
-HOST_API_KEY   = os.environ.get("HOST_API_KEY", "0000")
-ENV_RATE_LIMIT = int(os.environ.get("RATE_LIMIT_S", "180"))
-PERSIST_PATH   = os.environ.get("PERSIST_PATH", "queue_data.json")
-CONFIG_PATH    = os.environ.get("CONFIG_PATH", "config.json")
-STATIC_DIR     = os.path.join(os.path.dirname(__file__), "static")
-ALLOWED_LOGO_EXT = {".png", ".jpg", ".jpeg", ".gif"}
+// ==========================================================
+// 🧩 Header xác thực — dùng HOST_KEY được truyền từ host.html
+// ==========================================================
+function headersAuth() {
+  return HOST_KEY
+    ? { "Content-Type": "application/json", "X-Host-Key": HOST_KEY }
+    : { "Content-Type": "application/json" };
+}
 
-app = Flask(__name__)
+// ==========================================================
+// 🧩 Hàm render từng mục trong queue / history
+// ==========================================================
+function rQueue(it) {
+  return `<div class="item">
+    <img class="thumb" src="https://i.ytimg.com/vi/${it.id}/default.jpg" alt="thumb">
+    <div class="flex-1">${it.title || it.id}</div>
+    <button class="btn" data-id="${it.id}">Remove</button>
+  </div>`;
+}
 
-# ==========================================================
-# Core global data
-# ==========================================================
-queue = deque()
-history = deque(maxlen=300)
-current = None
-last_submit_ts = {}
-last_progress = {"videoId": None, "pos": 0, "dur": 0, "ts": 0, "ended": False}
+function rHistory(it) {
+  return `<div class="item">
+    <img class="thumb" src="https://i.ytimg.com/vi/${it.id}/default.jpg" alt="thumb">
+    <div class="text-sm">${it.title || it.id}</div>
+  </div>`;
+}
 
-config = {"rate_limit_s": ENV_RATE_LIMIT, "logo_path": None}
+// ==========================================================
+// 🎥 YouTube IFrame Player API callbacks
+// ==========================================================
+window.onYouTubeIframeAPIReady = function () {
+  player = new YT.Player("player", {
+    videoId: "",
+    playerVars: { autoplay: 1, controls: 1 },
+    events: { onReady: onPlayerReady, onStateChange: onPlayerStateChange },
+  });
+};
 
-YOUTUBE_ID_REGEX = re.compile(r"(?:v=|youtu\.be/|youtube\.com/(?:embed/|shorts/|watch\?v=))([A-Za-z0-9_-]{11})")
+function onPlayerReady() {
+  refresh();
+  if (tickTimer) clearInterval(tickTimer);
+  tickTimer = setInterval(sendProgressTick, 1000);
+}
 
-# ==========================================================
-# Utility functions
-# ==========================================================
-def extract_youtube_id(url: str):
-    """Trích xuất video_id từ URL YouTube hợp lệ"""
-    x = (url or "").strip()
-    if re.fullmatch(r"[A-Za-z0-9_-]{11}", x):
-        return x
-    m = YOUTUBE_ID_REGEX.search(x)
-    if m: return m.group(1)
-    try:
-        q = parse_qs(urlparse(x).query)
-        vid = q.get("v", [None])[0]
-        if vid and re.fullmatch(r"[A-Za-z0-9_-]{11}", vid):
-            return vid
-    except Exception:
-        pass
-    return None
+function onPlayerStateChange(e) {
+  if (e.data === YT.PlayerState.ENDED) {
+    post("/api/progress", {
+      ended: true,
+      videoId: currentId,
+      pos: player.getDuration(),
+      dur: player.getDuration(),
+    }).then(() => setTimeout(refresh, 800));
+  }
+}
 
-def fetch_title(video_id: str):
-    """Lấy tiêu đề video từ YouTube OEmbed"""
-    try:
-        r = requests.get(f"https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v={video_id}&format=json", timeout=6)
-        if r.ok: return r.json().get("title", f"Video {video_id}")
-    except Exception:
-        pass
-    return f"Video {video_id}"
+// ==========================================================
+// 🌐 POST tiện ích (tự động parse JSON)
+// ==========================================================
+async function post(path, body) {
+  const r = await fetch(path, {
+    method: "POST",
+    headers: headersAuth(),
+    body: JSON.stringify(body || {}),
+  });
+  return r.json().catch(() => ({}));
+}
 
-def load_state():
-    """Tải queue/history từ file lưu trữ (nếu có)"""
-    global queue, history, current, last_progress
-    if not os.path.exists(PERSIST_PATH): return
-    try:
-        with open(PERSIST_PATH, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        queue = deque(data.get("queue", []))
-        history = deque(data.get("history", []), maxlen=300)
-        current = data.get("current")
-        if current:
-            last_progress = {"videoId": current.get("id"), "pos": 0, "dur": 0, "ts": time.time(), "ended": False}
-    except Exception as e:
-        print("load_state error:", e)
+// ==========================================================
+// 🔁 Refresh trạng thái host (polling 2s/lần)
+// ==========================================================
+async function refresh() {
+  try {
+    const s = await (await fetch("/api/state")).json();
+    queueEl.innerHTML =
+      (s.queue || []).map(rQueue).join("") ||
+      '<div class="small">Queue empty</div>';
+    historyEl.innerHTML =
+      (s.history || []).slice(0, 15).map(rHistory).join("") ||
+      '<div class="small">No history</div>';
 
-def save_state():
-    """Lưu queue/history hiện tại vào file"""
-    try:
-        with open(PERSIST_PATH, "w", encoding="utf-8") as f:
-            json.dump({"queue": list(queue), "history": list(history), "current": current}, f, ensure_ascii=False, indent=2)
-    except Exception as e:
-        print("save_state error:", e)
+    // Chỉ update khi không đang nhập số
+    if (!editingRate) {
+      qs("#rate").value = (s.config && s.config.rate_limit_s) || 180;
+    }
 
-def load_config():
-    """Đọc cấu hình rate_limit và logo từ file config.json"""
-    global config
-    if os.path.exists(CONFIG_PATH):
-        try:
-            with open(CONFIG_PATH, "r", encoding="utf-8") as f:
-                data = json.load(f)
-            if isinstance(data, dict):
-                config["rate_limit_s"] = int(data.get("rate_limit_s", ENV_RATE_LIMIT))
-                config["logo_path"]    = data.get("logo_path")
-        except Exception as e:
-            print("load_config error:", e)
+    const cid = s.current && s.current.id;
+    if (cid && cid !== currentId && player) {
+      currentId = cid;
+      player.loadVideoById({
+        videoId: cid,
+        startSeconds: 0,
+        suggestedQuality: "large",
+      });
+    }
+  } catch (e) {
+    // ignore network errors
+  }
+}
 
-def save_config():
-    """Lưu cấu hình hiện tại"""
-    try:
-        with open(CONFIG_PATH, "w", encoding="utf-8") as f:
-            json.dump(config, f, ensure_ascii=False, indent=2)
-    except Exception as e:
-        print("save_config error:", e)
+// ==========================================================
+// ⏱️ Gửi tiến trình phát video về server
+// ==========================================================
+async function sendProgressTick() {
+  if (!player || !HOST_KEY) return;
+  try {
+    const dur = Number(player.getDuration() || 0);
+    const pos = Number(player.getCurrentTime() || 0);
+    const vid = currentId;
+    if (dur > 0) {
+      const remain = Math.max(0, dur - pos);
+      if (remain <= 3) {
+        countdown.classList.remove("hidden");
+        countdown.textContent = Math.ceil(remain);
+      } else {
+        countdown.classList.add("hidden");
+      }
+    }
+    await post("/api/progress", { videoId: vid, pos, dur, ended: false });
+  } catch (e) {}
+}
 
-def get_rate_limit_s():
-    """Lấy giới hạn thời gian submit hiện tại"""
-    return int(config.get("rate_limit_s") or ENV_RATE_LIMIT)
+// ==========================================================
+// 🎛️ Các nút điều khiển host
+// ==========================================================
+qs("#btnPlay").onclick = async () => {
+  await post("/api/play", {});
+  await refresh();
+};
+qs("#btnNext").onclick = async () => {
+  await post("/api/next", {});
+  await refresh();
+};
+qs("#btnPrev").onclick = async () => {
+  await post("/api/prev", {});
+  await refresh();
+};
+qs("#btnClear").onclick = async () => {
+  await post("/api/clear", {});
+  await refresh();
+};
 
-def set_next_current():
-    """Chuyển sang video tiếp theo trong hàng chờ"""
-    global current, last_progress
-    current = queue.popleft() if queue else None
-    last_progress = {"videoId": current["id"] if current else None, "pos": 0, "dur": 0, "ts": time.time(), "ended": False}
-    save_state()
-    return current
+// ==========================================================
+// ⚙️ Upload logo + Lưu cấu hình submit limit
+// ==========================================================
+qs("#btnLogo").onclick = async () => {
+  const f = qs("#logo").files[0];
+  if (!f) {
+    alert("Please choose a logo file first.");
+    return;
+  }
+  const fd = new FormData();
+  fd.append("logo", f);
+  const r = await fetch("/api/logo", {
+    method: "POST",
+    headers: HOST_KEY ? { "X-Host-Key": HOST_KEY } : {},
+    body: fd,
+  });
+  const d = await r.json().catch(() => ({}));
+  if (r.ok && d.ok) {
+    alert("✅ Logo uploaded successfully!");
+    setTimeout(() => location.reload(), 800);
+  } else {
+    alert("❌ Upload failed: " + (d.error || "Unknown error"));
+  }
+};
 
-def get_logo_url():
-    """Tạo URL logo có timestamp để tránh cache"""
-    if config.get("logo_path"):
-        return f"/{config['logo_path']}?t={int(time.time())}"
-    return None
+qs("#btnSaveCfg").onclick = async () => {
+  const v = parseInt(qs("#rate").value || "180", 10);
+  const r = await fetch("/api/config", {
+    method: "POST",
+    headers: headersAuth(),
+    body: JSON.stringify({ rate_limit_s: v }),
+  });
+  const d = await r.json().catch(() => ({}));
+  if (r.ok && d.ok) {
+    alert(`✅ Saved! New limit: ${v}s`);
+    await refresh();
+  } else {
+    alert("❌ Save failed: " + (d.error || "Unknown error"));
+  }
+};
 
-def require_host_key():
-    """Kiểm tra xác thực host key"""
-    if request.headers.get("X-Host-Key") != HOST_API_KEY:
-        return jsonify({"ok": False, "error": "Unauthorized"}), 401
-    return None
+// ==========================================================
+// 🧠 Các sự kiện input (chống bị auto refresh khi đang gõ)
+// ==========================================================
+const rateInput = qs("#rate");
+if (rateInput) {
+  rateInput.addEventListener("input", () => {
+    editingRate = true;
+  });
+  rateInput.addEventListener("blur", () => {
+    editingRate = false;
+  });
+}
 
-# ==========================================================
-# Routes
-# ==========================================================
-@app.route("/")
-def page_index():
-    return render_template("index.html", app_title=APP_TITLE, rate_limit_s=get_rate_limit_s(), logo_url=get_logo_url())
-
-@app.route("/host")
-def page_host():
-    # ✅ Truyền key trực tiếp xuống client-side để host.js sử dụng
-    return render_template(
-        "host.html",
-        app_title=APP_TITLE,
-        logo_url=get_logo_url(),
-        host_key=HOST_API_KEY
-    )
-
-@app.route("/api/state")
-def api_state():
-    """Trả toàn bộ trạng thái queue cho user và host"""
-    global last_progress
-    if last_progress.get("ended") and queue:
-        if current: history.appendleft(current)
-        set_next_current()
-        last_progress["ended"] = False
-    return jsonify({
-        "current": current,
-        "queue": list(queue),
-        "history": list(history),
-        "progress": last_progress,
-        "config": {"rate_limit_s": get_rate_limit_s(), "logo_url": get_logo_url()}
-    })
-
-@app.route("/api/add", methods=["POST"])
-def api_add():
-    """Người dùng gửi link video"""
-    data = request.get_json(silent=True) or {}
-    url  = (data.get("url") or "").strip()
-    ip   = request.remote_addr or "unknown"
-
-    now = time.time()
-    remain = get_rate_limit_s() - int(now - last_submit_ts.get(ip, 0))
-    if remain > 0:
-        return jsonify({"ok": False, "error": f"Please wait {remain}s."}), 429
-
-    vid = extract_youtube_id(url)
-    if not vid:
-        return jsonify({"ok": False, "error": "Paste a YouTube video link (not playlist)."}), 400
-
-    title = fetch_title(vid)
-    item = {"id": vid, "title": title, "by": ip, "ts": int(now)}
-    queue.append(item)
-    last_submit_ts[ip] = now
-
-    if not current:
-        set_next_current()
-
-    save_state()
-    return jsonify({"ok": True, "item": item})
-
-# ==========================================================
-# ✅ UPDATE v01.6 — Cập nhật tức thì rate_limit_s khi host lưu
-# ==========================================================
-@app.route("/api/config", methods=["GET", "POST"])
-def api_config():
-    if request.method == "GET":
-        return jsonify({"rate_limit_s": get_rate_limit_s(), "logo_url": get_logo_url()})
-    
-    unauth = require_host_key()
-    if unauth: return unauth
-
-    data = request.get_json(silent=True) or {}
-    updated = False
-
-    if "rate_limit_s" in data:
-        try:
-            v = int(data["rate_limit_s"])
-            if v < 10: v = 10
-            config["rate_limit_s"] = v  # cập nhật RAM ngay lập tức
-            updated = True
-        except Exception:
-            pass
-
-    if updated:
-        save_config()
-
-    return jsonify({
-        "ok": True,
-        "rate_limit_s": get_rate_limit_s(),
-        "logo_url": get_logo_url()
-    })
-
-# ==========================================================
-# ✅ UPDATE v01.6 — Hiển thị logo mới ngay lập tức sau upload
-# ==========================================================
-@app.route("/api/logo", methods=["POST"])
-def api_logo():
-    unauth = require_host_key()
-    if unauth: return unauth
-
-    if "logo" not in request.files:
-        return jsonify({"ok": False, "error": "No file"}), 400
-
-    f = request.files["logo"]
-    if not f.filename:
-        return jsonify({"ok": False, "error": "Empty filename"}), 400
-
-    fn = secure_filename(f.filename)
-    ext = os.path.splitext(fn)[1].lower()
-    if ext not in ALLOWED_LOGO_EXT:
-        return jsonify({"ok": False, "error": "Invalid file type"}), 400
-
-    # Xóa logo cũ
-    try:
-        for old in os.listdir(STATIC_DIR):
-            if old.startswith("logo"):
-                os.remove(os.path.join(STATIC_DIR, old))
-    except Exception:
-        pass
-
-    save_name = f"logo{ext}"
-    full = os.path.join(STATIC_DIR, save_name)
-    f.save(full)
-
-    # Cập nhật ngay config hiện tại
-    config["logo_path"] = f"static/{save_name}"
-    save_config()
-
-    return jsonify({"ok": True, "logo_url": f"/{config['logo_path']}?t={int(time.time())}"})
-
-# ==========================================================
-# Các API điều khiển queue (host)
-# ==========================================================
-@app.route("/api/play", methods=["POST"])
-def api_play():
-    unauth = require_host_key()
-    if unauth: return unauth
-    data = request.get_json(silent=True) or {}
-    vid  = data.get("videoId")
-    global current
-    if vid:
-        if current: history.appendleft(current)
-        title = fetch_title(vid)
-        current = {"id": vid, "title": title, "by": "host", "ts": int(time.time())}
-        save_state()
-    else:
-        if not current:
-            set_next_current()
-    return jsonify({"ok": True, "current": current})
-
-@app.route("/api/next", methods=["POST"])
-def api_next():
-    unauth = require_host_key()
-    if unauth: return unauth
-    if current: history.appendleft(current)
-    set_next_current()
-    return jsonify({"ok": True, "current": current})
-
-@app.route("/api/prev", methods=["POST"])
-def api_prev():
-    unauth = require_host_key()
-    if unauth: return unauth
-    global current, queue
-    if history:
-        if current: queue.appendleft(current)
-        current = history.popleft()
-        save_state()
-        return jsonify({"ok": True, "current": current})
-    return jsonify({"ok": False, "error": "No previous"}), 400
-
-@app.route("/api/clear", methods=["POST"])
-def api_clear():
-    unauth = require_host_key()
-    if unauth: return unauth
-    queue.clear()
-    save_state()
-    return jsonify({"ok": True})
-
-@app.route("/api/remove", methods=["POST"])
-def api_remove():
-    unauth = require_host_key()
-    if unauth: return unauth
-    data = request.get_json(silent=True) or {}
-    vid  = data.get("id")
-    if not vid: return jsonify({"ok": False}), 400
-    from collections import deque as dq
-    global queue
-    newq, removed = dq(), False
-    for it in list(queue):
-        if not removed and it["id"] == vid:
-            removed = True
-            continue
-        newq.append(it)
-    queue = newq
-    save_state()
-    return jsonify({"ok": True, "removed": removed})
-
-@app.route("/api/progress", methods=["POST"])
-def api_progress():
-    unauth = require_host_key()
-    if unauth: return unauth
-    global last_progress
-    data = request.get_json(silent=True) or {}
-    pos   = float(data.get("pos", 0))
-    dur   = float(data.get("dur", 0))
-    ended = bool(data.get("ended", False))
-    vid   = data.get("videoId")
-    ts    = time.time()
-    last_progress = {"videoId": vid, "pos": pos, "dur": dur, "ts": ts, "ended": ended}
-    if ended:
-        if current: history.appendleft(current)
-        set_next_current()
-        last_progress["ended"] = False
-    return jsonify({"ok": True})
-
-# ==========================================================
-# Health check
-# ==========================================================
-@app.route("/healthz")
-def healthz():
-    return "ok", 200
-
-# ==========================================================
-# Boot
-# ==========================================================
-def boot():
-    load_config()
-    load_state()
-boot()
-
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT","5000")), debug=False)
+// ==========================================================
+// 🚀 Bootstrap
+// ==========================================================
+if (window.YT && window.YT.Player) {
+  window.onYouTubeIframeAPIReady();
+}
+refresh();
+setInterval(refresh, 2000);
