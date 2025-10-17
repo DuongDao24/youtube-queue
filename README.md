@@ -1,24 +1,40 @@
-# YouTube Queue Online — v09 (package) / **internal app version: v01.6**
+# YouTube Queue Online — v01.6.1
 
-- Host phát bằng YouTube IFrame API (không cần extension)
-- Auto-next + Countdown 3-2-1 (góc phải dưới)
-- User: submit + queue + now playing + history + progress sync
-- Host: Play/Next/Prev/Remove/Clear + Upload logo + Save settings
-- Polling 2s, chạy ổn Render Free
+- HOST_API_KEY chính thức: `ytp-premium-2025-dxd` (auto inject xuống host.html)
+- Route người dùng: `/user` (`templates/user.html`)
+- Route host điều khiển: `/host` (`templates/host.html`)
+- `/api/config` & `/api/logo` cập nhật tức thì (không reload)
+- Auto-next; Prev/Start/Next/Clear/Remove hoạt động
+- UI giữ nguyên (chỉ sửa chức năng)
 
-## Quan trọng
-- **HOST_API_KEY mặc định**: `0000` (có thể đổi trong biến môi trường Render)
-- **RATE_LIMIT_S mặc định**: `180`
-- File lưu **state**: `queue_data.json`, config: `config.json` (tạo tự động)
+## Cấu trúc
+```
+.
+├── app.py
+├── Procfile
+├── render.yaml
+├── requirements.txt
+├── README.md
+├── /templates/
+│   ├── host.html
+│   └── user.html
+└── /static/
+    ├── host.js
+    ├── app.js
+    └── style.css
+```
 
-## Deploy nhanh (Render)
-1. Tạo dịch vụ Web mới (Python).
-2. Kéo thả/Push repo này.
-3. Kiểm tra `render.yaml` hoặc đặt Env:
-   - `HOST_API_KEY=0000`
-   - `RATE_LIMIT_S=180`
-4. Mở `/host`, nhập HOST_API_KEY và **Save key** để điều khiển.
+## Chạy local
+```bash
+pip install -r requirements.txt
+set HOST_API_KEY=ytp-premium-2025-dxd
+python app.py
+# Mở http://localhost:5000/user và http://localhost:5000/host
+```
 
-## Ghi chú phát hành
-- Gói v09, mã nguồn **v01.6** (ghi version trong đầu file, README và CSS).
-- Fix tràn chữ (ellipsis), giảm alert spam 401, UX submit rõ ràng.
+## Deploy Render
+- Build: `pip install -r requirements.txt`
+- Start: `gunicorn app:app --workers=2 --threads=4 --timeout=120`
+- Env:
+  - `HOST_API_KEY=ytp-premium-2025-dxd`
+  - `RATE_LIMIT_S=180`

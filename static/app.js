@@ -1,4 +1,8 @@
-// YouTube Queue Online — v01.6 (user)
+// ==========================================================
+// YouTube Queue Online — v01.6.1
+// Ngày cập nhật: 17/10/2025
+// Thay đổi: giữ nguyên UI; đảm bảo hiển thị limit/logo từ /api/state
+// ==========================================================
 const qEl = document.getElementById('queue');
 const hEl = document.getElementById('history');
 const playing = document.getElementById('playing');
@@ -37,10 +41,9 @@ function renderState(s){
 }
 async function load(){
   try{
-    const res = await fetch('/api/state');
-    const s = await res.json();
+    const s = await (await fetch('/api/state')).json();
     renderState(s);
-  }catch(e){ /* ignore network errors for polling */ }
+  }catch(e){}
 }
 document.getElementById('addForm').addEventListener('submit', async (e)=>{
   e.preventDefault();

@@ -1,3 +1,8 @@
+<!-- =========================================================
+YouTube Queue Online — v01.6.1
+Ngày cập nhật: 17/10/2025
+Thay đổi: auto inject HOST_KEY từ backend; giữ UI như đã thống nhất
+========================================================= -->
 <!doctype html>
 <html>
 <head>
@@ -15,7 +20,6 @@
       <h1 class="text-3xl font-bold">{{ app_title }} — Host</h1>
     </div>
 
-    <!-- 🎛️ Control panel -->
     <div class="bg-white rounded-2xl shadow p-5 space-y-3">
       <h2 class="font-semibold">⚙️ YouTube Queue Control — Options</h2>
       <div class="flex flex-wrap items-center gap-3">
@@ -27,7 +31,6 @@
       <div id="actionStatus" class="text-sm text-gray-500"></div>
     </div>
 
-    <!-- 🖥️ Main layout -->
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
       <div class="lg:col-span-2 space-y-4">
         <div class="bg-white rounded-2xl shadow p-5">
@@ -69,6 +72,9 @@
     </div>
   </div>
 
+  <script>
+    const HOST_KEY = "{{ host_key }}";
+  </script>
   <script src="/static/host.js"></script>
 </body>
 </html>

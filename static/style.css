@@ -1,4 +1,8 @@
-/* YouTube Queue Online — v01.6 */
+/* =========================================================
+   YouTube Queue Online — v01.6.1
+   Ngày cập nhật: 17/10/2025
+   Thay đổi: Giữ nguyên style v01.6, có ellipsis chống tràn
+   ========================================================= */
 .btn{ padding:8px 12px; border-radius:12px; border:1px solid #ddd; background:#f7f8fa; }
 .btn-primary{ padding:8px 12px; border-radius:12px; background:#2563eb; color:#fff; }
 .countdown-badge{
@@ -13,11 +17,6 @@
 .thumb{ width:80px; height:56px; border-radius:10px; object-fit:cover; background:#eee; }
 .small{ font-size:12px; color:#666; }
 
-/* --- Fix overflow/ellipsis for long titles --- */
-.item .flex-1 div:first-child { 
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
-#playing .font-semibold {
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display:block; max-width:100%;
-}
-#history .item { align-items: flex-start; }
+.item .flex-1 div:first-child { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+#playing .font-semibold { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; display:block; max-width:100%; }
+#history .item { align-items:flex-start; }

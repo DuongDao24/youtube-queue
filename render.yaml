@@ -7,6 +7,6 @@ services:
     startCommand: gunicorn app:app --workers=2 --threads=4 --timeout=120
     envVars:
       - key: HOST_API_KEY
-        value: "0000"
+        value: "ytp-premium-2025-dxd"
       - key: RATE_LIMIT_S
         value: "180"

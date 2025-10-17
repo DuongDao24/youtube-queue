@@ -1,15 +1,22 @@
+# ==========================================================
+# YouTube Queue Online — v01.6.1
+# Ngày cập nhật: 17/10/2025
+# Thay đổi trong bản này:
+# - HOST_API_KEY chính thức: ytp-premium-2025-dxd (auto inject xuống host.html)
+# - Cố định route /user (trang người dùng) và /host (trang điều khiển)
+# - /api/config & /api/logo cập nhật tức thì, phản hồi ngay
+# - Giữ nguyên UI, chỉ sửa chức năng; đồng bộ toàn bộ headers xác thực
+# ==========================================================
+
 import os, json, time, re
 from collections import deque
 from urllib.parse import urlparse, parse_qs
-from flask import Flask, request, jsonify, render_template
+from flask import Flask, request, jsonify, render_template, redirect
 from werkzeug.utils import secure_filename
 import requests
 
-# ===== YouTube Queue Online — v01.6 (internal) =====
 APP_TITLE      = os.environ.get("APP_TITLE", "YouTube Queue Online")
-# Default HOST_API_KEY set to "0000" so host can test immediately.
-# You can override in Render Dashboard > Environment with HOST_API_KEY.
-HOST_API_KEY   = os.environ.get("HOST_API_KEY", "0000")
+HOST_API_KEY   = os.environ.get("HOST_API_KEY", "ytp-premium-2025-dxd")
 ENV_RATE_LIMIT = int(os.environ.get("RATE_LIMIT_S", "180"))
 PERSIST_PATH   = os.environ.get("PERSIST_PATH", "queue_data.json")
 CONFIG_PATH    = os.environ.get("CONFIG_PATH", "config.json")
@@ -23,32 +30,30 @@ history = deque(maxlen=300)
 current = None
 last_submit_ts = {}
 last_progress = {"videoId": None, "pos": 0, "dur": 0, "ts": 0, "ended": False}
-
 config = {"rate_limit_s": ENV_RATE_LIMIT, "logo_path": None}
 
 YOUTUBE_ID_REGEX = re.compile(r"(?:v=|youtu\.be/|youtube\.com/(?:embed/|shorts/|watch\?v=))([A-Za-z0-9_-]{11})")
 
 def extract_youtube_id(url: str):
     x = (url or "").strip()
-    if re.fullmatch(r"[A-Za-z0-9_-]{11}", x):
-        return x
+    if re.fullmatch(r"[A-Za-z0-9_-]{11}", x): return x
     m = YOUTUBE_ID_REGEX.search(x)
     if m: return m.group(1)
     try:
         q = parse_qs(urlparse(x).query)
         vid = q.get("v", [None])[0]
-        if vid and re.fullmatch(r"[A-Za-z0-9_-]{11}", vid):
-            return vid
-    except Exception:
-        pass
+        if vid and re.fullmatch(r"[A-Za-z0-9_-]{11}", vid): return vid
+    except Exception: pass
     return None
 
 def fetch_title(video_id: str):
     try:
-        r = requests.get(f"https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v={video_id}&format=json", timeout=6)
+        r = requests.get(
+            f"https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v={video_id}&format=json",
+            timeout=6
+        )
         if r.ok: return r.json().get("title", f"Video {video_id}")
-    except Exception:
-        pass
+    except Exception: pass
     return f"Video {video_id}"
 
 def load_state():
@@ -112,12 +117,16 @@ def require_host_key():
     return None
 
 @app.route("/")
-def page_index():
-    return render_template("index.html", app_title=APP_TITLE, rate_limit_s=get_rate_limit_s(), logo_url=get_logo_url())
+def root_redirect():
+    return redirect("/user", code=302)
+
+@app.route("/user")
+def page_user():
+    return render_template("user.html", app_title=APP_TITLE, rate_limit_s=get_rate_limit_s(), logo_url=get_logo_url())
 
 @app.route("/host")
 def page_host():
-    return render_template("host.html", app_title=APP_TITLE, logo_url=get_logo_url())
+    return render_template("host.html", app_title=APP_TITLE, logo_url=get_logo_url(), host_key=HOST_API_KEY)
 
 @app.route("/api/state")
 def api_state():
@@ -160,6 +169,75 @@ def api_add():
     save_state()
     return jsonify({"ok": True, "item": item})
 
+@app.route("/api/config", methods=["GET", "POST"])
+def api_config():
+    if request.method == "GET":
+        return jsonify({"rate_limit_s": get_rate_limit_s(), "logo_url": get_logo_url()})
+    unauth = require_host_key()
+    if unauth: return unauth
+
+    data = request.get_json(silent=True) or {}
+    updated = False
+    if "rate_limit_s" in data:
+        try:
+            v = int(data["rate_limit_s"])
+            if v < 10: v = 10
+            config["rate_limit_s"] = v
+            updated = True
+        except Exception:
+            pass
+    if updated: save_config()
+
+    return jsonify({"ok": True, "rate_limit_s": get_rate_limit_s(), "logo_url": get_logo_url()})
+
+@app.route("/api/logo", methods=["POST"])
+def api_logo():
+    unauth = require_host_key()
+    if unauth: return unauth
+
+    if "logo" not in request.files:
+        return jsonify({"ok": False, "error": "No file"}), 400
+    f = request.files["logo"]
+    if not f.filename:
+        return jsonify({"ok": False, "error": "Empty filename"}), 400
+
+    fn = secure_filename(f.filename)
+    ext = os.path.splitext(fn)[1].lower()
+    if ext not in ALLOWED_LOGO_EXT:
+        return jsonify({"ok": False, "error": "Invalid file type"}), 400
+
+    try:
+        for old in os.listdir(STATIC_DIR):
+            if old.startswith("logo"):
+                try: os.remove(os.path.join(STATIC_DIR, old))
+                except Exception: pass
+    except Exception: pass
+
+    save_name = f"logo{ext}"
+    full = os.path.join(STATIC_DIR, save_name)
+    f.save(full)
+    config["logo_path"] = f"static/{save_name}"
+    save_config()
+
+    return jsonify({"ok": True, "logo_url": f"/{config['logo_path']}?t={int(time.time())}"})
+
+@app.route("/api/play", methods=["POST"])
+def api_play():
+    unauth = require_host_key()
+    if unauth: return unauth
+    data = request.get_json(silent=True) or {}
+    vid  = data.get("videoId")
+    global current
+    if vid:
+        if current: history.appendleft(current)
+        title = fetch_title(vid)
+        current = {"id": vid, "title": title, "by": "host", "ts": int(time.time())}
+        save_state()
+    else:
+        if not current:
+            set_next_current()
+    return jsonify({"ok": True, "current": current})
+
 @app.route("/api/next", methods=["POST"])
 def api_next():
     unauth = require_host_key()
@@ -179,23 +257,6 @@ def api_prev():
         save_state()
         return jsonify({"ok": True, "current": current})
     return jsonify({"ok": False, "error": "No previous"}), 400
-
-@app.route("/api/play", methods=["POST"])
-def api_play():
-    unauth = require_host_key()
-    if unauth: return unauth
-    data = request.get_json(silent=True) or {}
-    vid  = data.get("videoId")
-    global current
-    if vid:
-        if current: history.appendleft(current)
-        title = fetch_title(vid)
-        current = {"id": vid, "title": title, "by": "host", "ts": int(time.time())}
-        save_state()
-    else:
-        if not current:
-            set_next_current()
-    return jsonify({"ok": True, "current": current})
 
 @app.route("/api/clear", methods=["POST"])
 def api_clear():
@@ -223,50 +284,6 @@ def api_remove():
     queue = newq
     save_state()
     return jsonify({"ok": True, "removed": removed})
-
-@app.route("/api/config", methods=["GET", "POST"])
-def api_config():
-    if request.method == "GET":
-        return jsonify({"rate_limit_s": get_rate_limit_s(), "logo_url": get_logo_url()})
-    unauth = require_host_key()
-    if unauth: return unauth
-    data = request.get_json(silent=True) or {}
-    if "rate_limit_s" in data:
-        try:
-            v = int(data["rate_limit_s"])
-            if v < 10: v = 10
-            config["rate_limit_s"] = v
-        except Exception:
-            pass
-    save_config()
-    return jsonify({"ok": True, "rate_limit_s": get_rate_limit_s()})
-
-@app.route("/api/logo", methods=["POST"])
-def api_logo():
-    unauth = require_host_key()
-    if unauth: return unauth
-    if "logo" not in request.files:
-        return jsonify({"ok": False, "error": "No file"}), 400
-    f = request.files["logo"]
-    if not f.filename:
-        return jsonify({"ok": False, "error": "Empty filename"}), 400
-    fn = secure_filename(f.filename)
-    ext = os.path.splitext(fn)[1].lower()
-    if ext not in {".png",".jpg",".jpeg",".gif"}:
-        return jsonify({"ok": False, "error": "Invalid file type"}), 400
-    try:
-        for old in os.listdir(STATIC_DIR):
-            if old.startswith("logo"):
-                try: os.remove(os.path.join(STATIC_DIR, old))
-                except Exception: pass
-    except Exception:
-        pass
-    save_name = f"logo{ext}"
-    full = os.path.join(STATIC_DIR, save_name)
-    f.save(full)
-    config["logo_path"] = f"static/{save_name}"
-    save_config()
-    return jsonify({"ok": True, "logo_url": f"/{config['logo_path']}"} )
 
 @app.route("/api/progress", methods=["POST"])
 def api_progress():
