@@ -143,3 +143,19 @@ a{ color:var(--accent); }
   transform: translateY(-1px);
 }
 
+/* Fix overflow text trong khối Now Playing */
+#playing {
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  max-width: 100%;
+}
+
+#playing .font-semibold {
+  display: block;
+  white-space: normal !important;
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
