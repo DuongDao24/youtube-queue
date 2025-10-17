@@ -159,8 +159,19 @@ a{ color:var(--accent); }
   max-width: 100%;
 }
 
-/* ---- Hiệu ứng mờ nền khi Host chưa được xác minh ---- */
-body.blurred {
+/* ---- Hiệu ứng mờ nền khi Host chưa xác minh ---- */
+body.blurred main,
+body.blurred .content,
+body.blurred .page-wrapper,
+body.blurred > div:not(#lockOverlay) {
   filter: blur(8px);
   pointer-events: none;
   user-select: none;
+}
+
+#lockOverlay {
+  z-index: 9999;
+  filter: none !important;
+  pointer-events: all !important;
+}
+
