@@ -2,7 +2,10 @@
 YouTube Queue Online — v01.6.1
 Ngày cập nhật: 17/10/2025
 Loại cập nhật: UI Neumorphism (chỉ thay đổi hiển thị)
-Thay đổi: control bar + player card + settings + list theo Neumorphism
+Cập nhật thêm:
+- Tái bố cục phần Settings: Submit limit (seconds) + Save settings trên cùng 1 hàng
+- Tách cụm Logo thành khối riêng, đặt sau Queue
+- Giữ nguyên toàn bộ phần khác
 ========================================================= -->
 <!doctype html>
 <html>
@@ -18,7 +21,11 @@ Thay đổi: control bar + player card + settings + list theo Neumorphism
   <div class="max-w-7xl mx-auto p-6 stack">
     <!-- Header -->
     <div class="flex items-center gap-4">
-      {% if logo_url %}<img src="{{ logo_url }}" class="h-10 w-auto rounded-xl" alt="logo">{% endif %}
+      {% if logo_url %}
+      <div class="neu-pill p-2">
+        <img src="{{ logo_url }}" class="h-8 w-8 rounded-md" alt="logo">
+      </div>
+      {% endif %}
       <h1 class="text-3xl font-bold">{{ app_title }} — Host</h1>
     </div>
 
@@ -57,22 +64,14 @@ Thay đổi: control bar + player card + settings + list theo Neumorphism
 
       <!-- Right: Settings + History -->
       <div class="stack">
-        <!-- Settings -->
+        <!-- System Settings -->
         <div class="neu-card section stack">
-          <h2 class="font-semibold">Settings</h2>
-
-          <div class="stack">
-            <label class="small">Submit limit (seconds)</label>
-            <input id="rate" type="number" min="10" step="10" class="neu-inset w-48 px-3 py-2">
+          <h2 class="font-semibold mb-2">System Settings</h2>
+          <div class="flex items-center gap-4">
+            <label class="text-sm text-gray-600 whitespace-nowrap">Submit limit (seconds)</label>
+            <input id="rate" type="number" min="10" step="10" class="neu-inset px-3 py-2 w-24">
+            <button id="btnSaveCfg" class="neu-btn neu-btn-primary">Save settings</button>
           </div>
-
-          <div class="stack">
-            <label class="small">Logo (png/jpg/gif)</label>
-            <input id="logo" type="file" accept=".png,.jpg,.jpeg,.gif" class="neu-btn-light w-full">
-            <button id="btnLogo" class="neu-btn">Upload</button>
-          </div>
-
-          <button id="btnSaveCfg" class="neu-btn neu-btn-primary w-full">Save settings</button>
         </div>
 
         <!-- Recent history -->
@@ -80,6 +79,16 @@ Thay đổi: control bar + player card + settings + list theo Neumorphism
           <h2 class="font-semibold mb-3">Recent history</h2>
           <div id="history" class="list"></div>
         </div>
+      </div>
+    </div>
+
+    <!-- Logo Settings -->
+    <div class="neu-card section mt-6">
+      <h2 class="font-semibold mb-3">Logo Settings</h2>
+      <div class="stack">
+        <label class="small">Logo (png/jpg/gif)</label>
+        <input id="logo" type="file" accept=".png,.jpg,.jpeg,.gif" class="neu-btn-light w-full">
+        <button id="btnLogo" class="neu-btn">Upload</button>
       </div>
     </div>
   </div>
