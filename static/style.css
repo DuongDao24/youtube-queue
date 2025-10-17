@@ -9,8 +9,8 @@
 
 /* ---------- Theme tokens ---------- */
 :root{
-  --bg: #EEF2F5;             /* nền tổng thể */
-  --bg-card: #EEF2F5;         /* nền card (cùng màu để liền khối) */
+  --bg: #E0E5EC;             /* nền tổng thể */
+  --bg-card: #E0E5EC;         /* nền card (cùng màu để liền khối) */
   --text-1: #1F2937;          /* xám đậm */
   --text-2: #6B7280;          /* xám nhẹ */
   --accent: #2563EB;          /* xanh điểm nhấn (giữ brand hiện tại) */
@@ -124,3 +124,22 @@ a{ color:var(--accent); }
 .list{ display:grid; gap: var(--gap); }
 .item{ display:flex; align-items:center; gap:12px; }
 .remove-btn{ margin-left:auto; }
+
+/* ---- Light secondary button for inputs (e.g. Choose File) ---- */
+.neu-btn-light {
+  appearance: none;
+  border: none;
+  cursor: pointer;
+  padding: 10px 14px;
+  border-radius: var(--radius-md);
+  background: var(--bg-card);
+  box-shadow: var(--shadow-dark), var(--shadow-light);
+  color: var(--text-2);
+  font-weight: 500;
+  transition: transform .08s ease, box-shadow .18s ease, filter .18s ease;
+}
+.neu-btn-light:hover {
+  filter: brightness(1.03);
+  transform: translateY(-1px);
+}
+
