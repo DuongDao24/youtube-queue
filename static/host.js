@@ -132,19 +132,42 @@ if (btnLogo) {
 const saveBtn = qs("#btnSaveCfg");
 if (saveBtn) {
   saveBtn.onclick = async () => {
-    const v = parseInt(qs("#rate").value || "180", 10);
-    const m = parseInt(qs("#nickLimit").value || "60", 10);
-    const r = await fetch("/api/config", { method: "POST", headers: headersAuth(), body: JSON.stringify({ rate_limit_s: v, nickname_valid_minutes: m }) });
-    const d = await r.json().catch(() => ({}));
-    if (r.ok && d.ok) { alert(`✅ Saved! Limit: ${v}s, Nickname window: ${m}m`); await refresh(); }
-    else { alert("❌ Save failed: " + (d.error || "Unknown error")); }
-  };
-}
+    const rateInput = qs("#rate");
+    const nickInput = qs("#nickLimit");
+    const rateVal = parseInt(rateInput.value || "180", 10);
+    const nickVal = parseInt(nickInput.value || "60", 10);
 
-const rateInput = qs("#rate");
-if (rateInput) {
-  rateInput.addEventListener("input", () => { editingRate = true; });
-  rateInput.addEventListener("blur", () => { editingRate = false; });
+    // feedback trước
+    saveBtn.textContent = "Saving...";
+    saveBtn.disabled = true;
+
+    try {
+      const r = await fetch("/api/config", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Host-Key": HOST_KEY,
+        },
+        body: JSON.stringify({
+          rate_limit_s: rateVal,
+          nickname_valid_minutes: nickVal,
+        }),
+      });
+
+      const d = await r.json().catch(() => ({}));
+      if (r.ok && d.ok) {
+        alert(`✅ Settings saved!\nSubmit limit: ${d.rate_limit_s}s\nNickname valid: ${d.nickname_valid_minutes} mins`);
+      } else {
+        alert(`❌ Failed: ${d.error || "Unknown error"}`);
+      }
+    } catch (err) {
+      alert("⚠️ Network or server error while saving settings.");
+    } finally {
+      saveBtn.textContent = "Save settings";
+      saveBtn.disabled = false;
+      await refresh(); // cập nhật lại giao diện
+    }
+  };
 }
 
 refresh();
