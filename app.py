@@ -116,7 +116,8 @@ def load_nicks():
     if os.path.exists(NICK_PATH):
         try:
             with open(NICK_PATH, "r", encoding="utf-8") as f:
-                nicknames = json.load(f) or {}
+                raw = f.read().strip() or "{}"
+                nicknames = json.loads(raw)
         except Exception as e:
             print("load_nicks error:", e)
 
