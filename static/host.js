@@ -79,9 +79,17 @@ async function refresh() {
     historyEl.innerHTML = (s.history||[]).slice(0,15).map(rHistory).join("") || '<div class="small">No history</div>';
 
     if (!editingRate) {
-      if (qs("#rate")) qs("#rate").value = (s.config && s.config.rate_limit_s) || 180;
-      if (qs("#nickLimit")) qs("#nickLimit").value = (s.config && s.config.nickname_valid_minutes) || 60;
+    const rateBox = qs("#rate");
+    if (rateBox && document.activeElement !== rateBox) {
+    rateBox.value = (s.config && s.config.rate_limit_s) || 180;
     }
+
+    const nickBox = qs("#nickLimit");
+    if (nickBox && document.activeElement !== nickBox) {
+    nickBox.value = (s.config && s.config.nickname_valid_minutes) || 60;
+    }
+  }
+
 
     const cid = s.current && s.current.id;
     if (cid && cid !== currentId && player) {
