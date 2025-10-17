@@ -1,11 +1,11 @@
 <!-- =========================================================
-YouTube Queue Online — v01.6.1
+YouTube Queue Online — v01.6.2
 Ngày cập nhật: 17/10/2025
-Loại cập nhật: UI Neumorphism (chỉ thay đổi hiển thị)
-Cập nhật thêm:
-- Tái bố cục phần Settings: Submit limit (seconds) + Save settings trên cùng 1 hàng
-- Tách cụm Logo thành khối riêng, đặt sau Queue
-- Giữ nguyên toàn bộ phần khác
+Loại cập nhật: Bảo vệ trang Host + Đổi mật khẩu Host (UI)
+Cập nhật:
+- Thêm popup "HOST VERIFY" (password) phủ toàn trang, blur nền khi chưa xác minh
+- Thêm thẻ "Change Host Password" (đổi mật khẩu, xác minh bằng HOST_KEY)
+- Giữ nguyên toàn bộ phần khác (Control, Player, Queue, Settings, Logo)
 ========================================================= -->
 <!doctype html>
 <html>
@@ -17,7 +17,17 @@ Cập nhật thêm:
   <link rel="stylesheet" href="/static/style.css">
   <script src="https://www.youtube.com/iframe_api"></script>
 </head>
-<body>
+<body class="blurred">
+  <!-- ===== HOST VERIFY POPUP ===== -->
+  <div id="lockOverlay" class="fixed inset-0 bg-black/60 backdrop-blur-md flex items-center justify-center z-50">
+    <div class="neu-card section w-80 text-center p-6">
+      <h2 class="text-xl font-bold mb-4">HOST VERIFY</h2>
+      <input id="hostPass" type="password" placeholder="Enter password" class="neu-inset w-full px-3 py-2 mb-3 text-center">
+      <button id="btnHostLogin" class="neu-btn neu-btn-primary w-full">Login</button>
+      <div id="loginMsg" class="text-sm mt-2 text-red-500"></div>
+    </div>
+  </div>
+
   <div class="max-w-7xl mx-auto p-6 stack">
     <!-- Header -->
     <div class="flex items-center gap-4">
@@ -56,37 +66,34 @@ Cập nhật thêm:
         <!-- Queue -->
         <div class="neu-card section">
           <h2 class="font-semibold mb-3">Queue</h2>
-          <div id="queue" class="list">
-            <!-- host.js render items -->
-          </div>
+          <div id="queue" class="list"></div>
         </div>
       </div>
 
       <!-- Right: Settings + History -->
       <div class="stack">
-
         <!-- System Settings -->
         <div class="neu-card section stack w-full max-w-full">
           <h2 class="font-semibold mb-3">System Settings</h2>
 
-        <!-- Submit limit -->
-        <div class="flex items-center justify-between gap-3">
-          <label class="text-sm text-gray-600 whitespace-nowrap">Submit limit (seconds)</label>
-          <input id="rate" type="number" min="10" step="10" class="neu-inset px-3 py-2 w-28 text-center" value="180">
-        </div>
-
-        <!-- Nickname limit -->
+          <!-- Submit limit -->
           <div class="flex items-center justify-between gap-3">
-          <label class="text-sm text-gray-600 whitespace-nowrap">Nickname limit (minutes)</label>
-          <input id="nickLimit" type="number" min="1" step="1" class="neu-inset px-3 py-2 w-28 text-center" value="60">
+            <label class="text-sm text-gray-600 whitespace-nowrap">Submit limit (seconds)</label>
+            <input id="rate" type="number" min="10" step="10" class="neu-inset px-3 py-2 w-28 text-center">
+          </div>
+
+          <!-- Nickname limit -->
+          <div class="flex items-center justify-between gap-3">
+            <label class="text-sm text-gray-600 whitespace-nowrap">Nickname limit (minutes)</label>
+            <input id="nickLimit" type="number" min="1" step="1" class="neu-inset px-3 py-2 w-28 text-center">
+          </div>
+
+          <!-- Save button -->
+          <div class="pt-3">
+            <button id="btnSaveCfg" class="neu-btn neu-btn-primary w-full">Save settings</button>
+          </div>
         </div>
 
-        <!-- Save button -->
-          <div class="pt-3">
-          <button id="btnSaveCfg" class="neu-btn neu-btn-primary w-full">Save settings</button>
-        </div>
-      </div>
-       
         <!-- Recent history -->
         <div class="neu-card section">
           <h2 class="font-semibold mb-3">Recent history</h2>
@@ -104,10 +111,22 @@ Cập nhật thêm:
         <button id="btnLogo" class="neu-btn">Upload</button>
       </div>
     </div>
+
+    <!-- Change Host Password -->
+    <div class="neu-card section mt-6">
+      <h2 class="font-semibold mb-3">Change Host Password</h2>
+      <div class="stack gap-2">
+        <input id="oldPass" type="password" class="neu-inset px-3 py-2" placeholder="Current password">
+        <input id="newPass" type="password" class="neu-inset px-3 py-2" placeholder="New password">
+        <input id="masterKey" type="password" class="neu-inset px-3 py-2" placeholder="HOST_KEY (ytp-premium-2025-dxd)">
+        <button id="btnChangePass" class="neu-btn neu-btn-primary w-full">Change Password</button>
+      </div>
+      <div id="changeMsg" class="small mt-2"></div>
+    </div>
   </div>
 
   <script>
-    const HOST_KEY = "{{ host_key }}";
+    const HOST_KEY = "{{ host_key }}"; /* dùng ngầm cho API control; không hiển thị cho user */
   </script>
   <script src="/static/host.js"></script>
 </body>
